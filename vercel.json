@@ -1,0 +1,10 @@
+{
+  "headers": [
+    {
+      "source": "/api/state",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}

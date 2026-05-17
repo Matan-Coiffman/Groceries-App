@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#d8cdb3" />
+<title>רשימת קניות משפחתית</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Suez+One&family=Assistant:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: #2a241a;
+    font-family: 'Heebo', system-ui, sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  * { box-sizing: border-box; }
+  #root {
+    width: 100%;
+    height: 100dvh;
+    height: 100vh;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    background:
+      radial-gradient(120% 80% at 50% 0%, #4a3f2a 0%, #2a241a 60%, #1a140a 100%);
+  }
+  #app-frame {
+    width: 100%;
+    max-width: 480px;
+    height: 100%;
+    background: #efe8d8;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 60px -10px rgba(0,0,0,.7);
+  }
+  @media (min-width: 520px) {
+    #app-frame { border-radius: 28px; margin: 12px 0; max-height: calc(100dvh - 24px); }
+  }
+  /* Disable text selection and tap-highlight on the touch surface */
+  #app-frame, #app-frame * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app-frame input { -webkit-user-select: text; user-select: text; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+// ============================================================
+//  Family Grocery List — Notebook variation
+//  Hebrew RTL, shared state via Vercel KV (/api/state)
+// ============================================================
+
+const ACCENT = '#b8556a';
+const DENSITY = 'comfy'; // 'compact' | 'comfy'
+const SURPRISE = true;   // confetti on full check-off
+
+// ---- Family roster -----------------------------------------
+const FAMILY = [
+  { id: 'avi',  name: 'אבא',  initial: 'ד', color: '#2c5a7a' },
+  { id: 'ima',  name: 'אמא',  initial: 'ר', color: '#b8556a' },
+  { id: 'noa',  name: 'נועה', initial: 'נ', color: '#c89456' },
+  { id: 'yoa',  name: 'יואב', initial: 'י', color: '#5a7a48' },
+  { id: 'maya', name: 'מאיה', initial: 'מ', color: '#7a5a8a' },
+];
+const familyById = (id) => FAMILY.find((f) => f.id === id) || FAMILY[0];
+
+const SEED_ITEMS = [
+  { id: 'i1', text: 'חלב 3%',       qty: 2,  by: 'ima',  done: false, pinned: true  },
+  { id: 'i2', text: 'לחם פרוס מלא',  qty: 1,  by: 'avi',  done: false, pinned: true  },
+  { id: 'i3', text: 'ביצים L',       qty: 12, by: 'avi',  done: true,  pinned: false },
+  { id: 'i4', text: 'עגבניות שרי',   qty: 1,  by: 'noa',  done: false, pinned: false },
+  { id: 'i5', text: 'יוגורט תות',    qty: 4,  by: 'maya', done: false, pinned: false },
+  { id: 'i6', text: 'בננות',         qty: 1,  by: 'yoa',  done: true,  pinned: false },
+  { id: 'i7', text: 'אבוקדו',        qty: 3,  by: 'ima',  done: false, pinned: false },
+  { id: 'i8', text: 'קוטג׳',        qty: 2,  by: 'avi',  done: false, pinned: false },
+];
+
+const HISTORY_SEED = [
+  { id: 'h1', label: 'שבת',          date: 'אתמול',      daysAgo: 1,
+    items: [
+      { text: 'חלב 3%',       qty: 2, by: 'ima' },
+      { text: 'חלה',          qty: 1, by: 'avi' },
+      { text: 'יין אדום',      qty: 1, by: 'avi' },
+      { text: 'דגים',         qty: 2, by: 'ima' },
+      { text: 'עוגת שוקולד',   qty: 1, by: 'maya' },
+      { text: 'פירות יער',     qty: 1, by: 'noa' },
+    ] },
+  { id: 'h2', label: 'אמצע שבוע',     date: 'יום שלישי',  daysAgo: 4,
+    items: [
+      { text: 'לחם',          qty: 1, by: 'avi' },
+      { text: 'מלפפונים',      qty: 1, by: 'noa' },
+      { text: 'גבינה לבנה',    qty: 2, by: 'ima' },
+      { text: 'דגני בוקר',     qty: 1, by: 'yoa' },
+    ] },
+  { id: 'h3', label: 'בית מרקחת',     date: 'שבוע שעבר',  daysAgo: 8,
+    items: [
+      { text: 'אקמול',         qty: 1, by: 'ima' },
+      { text: 'משחת שיניים',    qty: 2, by: 'avi' },
+      { text: 'נייר טואלט',     qty: 1, by: 'avi' },
+    ] },
+];
+
+const uid = () => 'i' + Math.random().toString(36).slice(2, 8);
+
+// ---- Suggestions derived from history ----------------------
+function deriveSuggestions(history, currentItems, max = 6) {
+  const onList = new Set(currentItems.map((x) => x.text));
+  const stats = new Map();
+  history.forEach((h, idx) => {
+    const daysAgo = (typeof h.daysAgo === 'number') ? h.daysAgo : idx * 3;
+    h.items.forEach((it) => {
+      const s = stats.get(it.text) || { count: 0, mostRecentDays: Infinity, lastBy: it.by, lastQty: it.qty };
+      s.count += 1;
+      if (daysAgo < s.mostRecentDays) {
+        s.mostRecentDays = daysAgo;
+        s.lastBy = it.by;
+        s.lastQty = it.qty;
+      }
+      stats.set(it.text, s);
+    });
+  });
+  return [...stats.entries()]
+    .filter(([text]) => !onList.has(text))
+    .map(([text, s]) => ({
+      text,
+      count: s.count,
+      mostRecentDays: s.mostRecentDays,
+      by: s.lastBy,
+      qty: s.lastQty,
+      score: s.count * 2 + Math.min(s.mostRecentDays, 14) / 7,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map((s) => ({ text: s.text, reason: reasonFor(s), by: s.by }));
+}
+
+function reasonFor(s) {
+  if (s.count >= 3 && s.mostRecentDays <= 7) return 'נקנה כמעט בכל שבוע';
+  if (s.count >= 2 && s.mostRecentDays <= 7) return 'נקנה לאחרונה — אולי נגמר?';
+  if (s.count >= 2 && s.mostRecentDays >  7) return `נגמר לפני ${Math.round(s.mostRecentDays)} ימים`;
+  if (s.count === 1 && s.mostRecentDays > 7) return 'נקנה פעם, מומלץ לחדש';
+  return 'מומלץ לפי ההיסטוריה';
+}
+
+// ---- KV-backed shared state hook ---------------------------
+// Optimistic local updates + 30s polling + debounced POST.
+// Also persists to localStorage so the list survives a refresh when the
+// /api/state endpoint isn't reachable (e.g. static preview, offline phone).
+const LOCAL_KEY = 'family-groceries:state-cache:v1';
+
+function loadLocalState() {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || typeof s !== 'object') return null;
+    if (!Array.isArray(s.items) || !Array.isArray(s.history)) return null;
+    return { items: s.items, history: s.history, version: typeof s.version === 'number' ? s.version : 0 };
+  } catch (e) { return null; }
+}
+
+function saveLocalState(state) {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify({
+      items: state.items, history: state.history, version: state.version || 0,
+    }));
+  } catch (e) {}
+}
+
+function useGroceries() {
+  const initial = React.useMemo(
+    () => loadLocalState() || { items: SEED_ITEMS, history: HISTORY_SEED, version: 0 },
+    []
+  );
+  const [items, setItems]     = React.useState(initial.items);
+  const [history, setHistory] = React.useState(initial.history);
+  const [me, setMeRaw]        = React.useState(() => {
+    try { return localStorage.getItem('grocery-me') || 'ima'; } catch (e) { return 'ima'; }
+  });
+  const [version, setVersion] = React.useState(initial.version);
+  const [loaded, setLoaded]   = React.useState(false);
+  const [offline, setOffline] = React.useState(false);
+
+  // Refs hold latest values for use inside polling/debounce callbacks
+  const itemsRef   = React.useRef(items);
+  const historyRef = React.useRef(history);
+  const versionRef = React.useRef(version);
+  const pendingRef = React.useRef(null);   // pending POST (debounce)
+  const inFlightRef = React.useRef(0);     // count of in-flight POSTs
+  React.useEffect(() => { itemsRef.current = items; }, [items]);
+  React.useEffect(() => { historyRef.current = history; }, [history]);
+  React.useEffect(() => { versionRef.current = version; }, [version]);
+
+  const setMe = (id) => {
+    setMeRaw(id);
+    try { localStorage.setItem('grocery-me', id); } catch (e) {}
+  };
+
+  // ----- Networking -----
+  const applyServerState = React.useCallback((s) => {
+    if (!s) return;
+    if (typeof s.version === 'number' && s.version < versionRef.current) return;
+    if (Array.isArray(s.items))   setItems(s.items);
+    if (Array.isArray(s.history)) setHistory(s.history);
+    if (typeof s.version === 'number') setVersion(s.version);
+    saveLocalState({
+      items: Array.isArray(s.items) ? s.items : itemsRef.current,
+      history: Array.isArray(s.history) ? s.history : historyRef.current,
+      version: typeof s.version === 'number' ? s.version : versionRef.current,
+    });
+  }, []);
+
+  const fetchState = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/state', { cache: 'no-store' });
+      if (!r.ok) throw new Error('GET failed');
+      const s = await r.json();
+      setOffline(false);
+      // Don't clobber local changes while a POST is in flight.
+      if (inFlightRef.current === 0) applyServerState(s);
+    } catch (e) {
+      setOffline(true);
+    } finally {
+      setLoaded(true);
+    }
+  }, [applyServerState]);
+
+  const pushState = React.useCallback(() => {
+    if (pendingRef.current) clearTimeout(pendingRef.current);
+    pendingRef.current = setTimeout(async () => {
+      pendingRef.current = null;
+      inFlightRef.current += 1;
+      try {
+        const body = JSON.stringify({
+          items: itemsRef.current,
+          history: historyRef.current,
+          baseVersion: versionRef.current,
+        });
+        const r = await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+        });
+        if (r.status === 409) {
+          const s = await r.json();
+          applyServerState(s);
+          setOffline(false);
+        } else if (r.ok) {
+          const s = await r.json();
+          if (typeof s.version === 'number') {
+            setVersion(s.version);
+            saveLocalState({ items: itemsRef.current, history: historyRef.current, version: s.version });
+          }
+          setOffline(false);
+        } else {
+          setOffline(true);
+        }
+      } catch (e) {
+        setOffline(true);
+      } finally {
+        inFlightRef.current = Math.max(0, inFlightRef.current - 1);
+      }
+    }, 250);
+  }, [applyServerState]);
+
+  // Initial fetch + visibility-aware polling
+  React.useEffect(() => {
+    fetchState();
+    const onFocus = () => fetchState();
+    const onVis = () => { if (document.visibilityState === 'visible') fetchState(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchState();
+    }, 30000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(id);
+    };
+  }, [fetchState]);
+
+  // ----- Mutations (optimistic + sync) -----
+  const mutate = (nextItems, nextHistory) => {
+    if (nextItems)   { setItems(nextItems);     itemsRef.current = nextItems; }
+    if (nextHistory) { setHistory(nextHistory); historyRef.current = nextHistory; }
+    saveLocalState({
+      items: itemsRef.current, history: historyRef.current, version: versionRef.current,
+    });
+    pushState();
+  };
+
+  const add = (text, qty = 1, by = me) => {
+    const t = text.trim();
+    if (!t) return;
+    mutate([{ id: uid(), text: t, qty, by, done: false, pinned: false }, ...itemsRef.current]);
+  };
+  const remove   = (id) => mutate(itemsRef.current.filter((x) => x.id !== id));
+  const toggle   = (id) => mutate(itemsRef.current.map((x) => x.id === id ? { ...x, done: !x.done } : x));
+  const togglePin = (id) => mutate(itemsRef.current.map((x) => x.id === id ? { ...x, pinned: !x.pinned } : x));
+  const setQty   = (id, qty) => mutate(itemsRef.current.map((x) => x.id === id ? { ...x, qty: Math.max(1, qty) } : x));
+  const reorder  = (fromIdx, toIdx) => {
+    const xs = itemsRef.current;
+    if (toIdx < 0 || toIdx >= xs.length || fromIdx === toIdx) return;
+    const next = xs.slice();
+    const [it] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, it);
+    mutate(next);
+  };
+  const reset = (label = 'רשימה') => {
+    const xs = itemsRef.current;
+    if (!xs.length) return;
+    const archive = {
+      id: 'h' + Date.now(),
+      label,
+      date: 'היום',
+      daysAgo: 0,
+      items: xs.map((x) => ({ text: x.text, qty: x.qty, by: x.by })),
+    };
+    const remaining = xs.filter((x) => x.pinned).map((x) => ({ ...x, done: false }));
+    mutate(remaining, [archive, ...historyRef.current]);
+  };
+  const restoreFromHistory = (histId) => {
+    const h = historyRef.current.find((x) => x.id === histId);
+    if (!h) return;
+    const existing = new Set(itemsRef.current.map((x) => x.text));
+    const adds = h.items
+      .filter((x) => !existing.has(x.text))
+      .map((x) => ({ id: uid(), text: x.text, qty: x.qty, by: x.by, done: false, pinned: false }));
+    if (!adds.length) return;
+    mutate([...adds, ...itemsRef.current]);
+  };
+  const addSuggestion = (text, by = me) => add(text, 1, by);
+
+  return {
+    items, history, me, setMe,
+    add, remove, toggle, togglePin, setQty, reorder,
+    reset, restoreFromHistory, addSuggestion,
+    loaded, offline, version,
+  };
+}
+
+// ---- UI primitives -----------------------------------------
+function Avatar({ id, size = 22, dark = false }) {
+  const f = familyById(id);
+  return (
+    <div title={f.name} style={{
+      width: size, height: size, borderRadius: '50%',
+      background: dark ? f.color : `${f.color}22`,
+      color: dark ? '#fff' : f.color,
+      border: `1.2px solid ${f.color}`,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'Suez One, Heebo', fontSize: size * 0.5, fontWeight: 700,
+      flexShrink: 0, lineHeight: 1,
+    }}>{f.initial}</div>
+  );
+}
+
+function HandCheckbox({ checked, color }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" style={{ flexShrink: 0 }}>
+      <path d="M3.5 4 Q3 4.2 3 5 L3.2 17.5 Q3.4 18.2 4.2 18.2 L17.5 18 Q18.4 17.8 18.4 17 L18.2 4.6 Q18 3.8 17.2 3.8 Z"
+        fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+      {checked && (
+        <path d="M5.5 11.5 Q7 13 9.5 15.5 Q12 12 17 5.5"
+          fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ strokeDasharray: 24, strokeDashoffset: 0, animation: 'drawcheck .4s ease-out' }} />
+      )}
+    </svg>
+  );
+}
+
+function Thumbtack({ pinned }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" style={{
+      transform: pinned ? 'rotate(-12deg)' : 'rotate(0deg)',
+      transition: 'transform .2s ease-out',
+    }}>
+      {/* Head of pin */}
+      <ellipse cx="9" cy="6" rx="4.4" ry="3.4"
+        fill={pinned ? '#f7d774' : 'none'}
+        stroke={pinned ? '#5a3a10' : '#2a241a'}
+        strokeWidth="1.3" />
+      {/* Highlight */}
+      {pinned && <ellipse cx="7.4" cy="4.6" rx="1.1" ry=".7" fill="rgba(255,255,255,.55)" />}
+      {/* Needle */}
+      <path d="M9 9.2 L9 15.5"
+        stroke={pinned ? '#5a3a10' : '#2a241a'}
+        strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function HoldButton({ onComplete, children, color = '#222', dur = 1100 }) {
+  const [pct, setPct] = React.useState(0);
+  const raf = React.useRef(0);
+  const start = React.useRef(0);
+  const active = React.useRef(false);
+
+  const tick = (t) => {
+    if (!active.current) return;
+    if (!start.current) start.current = t;
+    const p = Math.min(1, (t - start.current) / dur);
+    setPct(p);
+    if (p >= 1) { active.current = false; setPct(0); start.current = 0; onComplete && onComplete(); return; }
+    raf.current = requestAnimationFrame(tick);
+  };
+  const begin = (e) => {
+    e.preventDefault();
+    active.current = true; start.current = 0;
+    raf.current = requestAnimationFrame(tick);
+  };
+  const end = () => {
+    active.current = false; start.current = 0;
+    cancelAnimationFrame(raf.current);
+    setPct(0);
+  };
+
+  return (
+    <button
+      onPointerDown={begin} onPointerUp={end} onPointerLeave={end} onPointerCancel={end}
+      style={{
+        position: 'relative', overflow: 'hidden',
+        border: `1.5px dashed ${color}`, background: 'transparent',
+        color, fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+        padding: '8px 14px', borderRadius: 12,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        touchAction: 'none', userSelect: 'none',
+        transition: 'transform .12s',
+        transform: pct > 0 ? 'scale(.97)' : 'scale(1)',
+      }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: color, opacity: .14,
+        transform: `translateX(${(1 - pct) * 100}%)`,
+        transition: pct === 0 ? 'transform .25s ease-out' : 'none',
+      }} />
+      <span style={{ position: 'relative', zIndex: 1 }}>{children}</span>
+    </button>
+  );
+}
+
+function Confetti({ fire }) {
+  const pieces = React.useMemo(() => {
+    if (!fire) return [];
+    return Array.from({ length: 28 }).map((_, i) => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 0.3,
+      duration: 1.6 + Math.random() * 0.9,
+      color: ['#b8556a','#2c5a7a','#5a7a48','#c89456','#7a5a8a','#f7d774'][i % 6],
+      rot: Math.random() * 360,
+      size: 6 + Math.random() * 7,
+    }));
+  }, [fire]);
+  if (!fire) return null;
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 99 }}>
+      {pieces.map((p, i) => (
+        <div key={i} style={{
+          position: 'absolute', top: -20, left: `${p.left}%`,
+          width: p.size, height: p.size * 0.6, background: p.color,
+          borderRadius: 1, transform: `rotate(${p.rot}deg)`,
+          animation: `confettiFall ${p.duration}s ease-in ${p.delay}s forwards`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ---- One list row with swipe-to-delete ---------------------
+function NotebookRow({
+  item, rowH, accent, showAvatar, isDragging,
+  onDragStart, onToggle, onRemove, onTogglePin,
+}) {
+  const [dx, setDx] = React.useState(0);
+  const [animating, setAnimating] = React.useState(false);
+  const [removing, setRemoving] = React.useState(false);
+
+  // Pointer-event swipe tracking. Only horizontal swipes engage.
+  const swipeRef = React.useRef(null);
+  const onSwipeStart = (e) => {
+    // Ignore touches starting on the drag handle or checkbox — those have their own behavior.
+    const tag = e.target.closest('[data-row-control]');
+    if (tag) return;
+    e.preventDefault();
+    swipeRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      lastX: e.clientX, locked: null, // 'h' (swipe) | 'v' (scroll/cancel) | null
+      crossed: false,
+    };
+    window.addEventListener('pointermove', onSwipeMove);
+    window.addEventListener('pointerup', onSwipeEnd);
+    window.addEventListener('pointercancel', onSwipeEnd);
+  };
+  const onSwipeMove = (e) => {
+    const s = swipeRef.current; if (!s) return;
+    const ddx = e.clientX - s.startX;
+    const ddy = e.clientY - s.startY;
+    if (s.locked == null) {
+      if (Math.abs(ddx) < 6 && Math.abs(ddy) < 6) return;
+      s.locked = Math.abs(ddx) > Math.abs(ddy) ? 'h' : 'v';
+      if (s.locked === 'h') setAnimating(false);
+    }
+    if (s.locked !== 'h') return;
+    // Only allow swipe to the left (negative dx in screen coords).
+    const next = Math.min(0, ddx);
+    setDx(next);
+    if (!s.crossed && Math.abs(next) >= 100) {
+      s.crossed = true;
+      try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
+    } else if (s.crossed && Math.abs(next) < 100) {
+      s.crossed = false;
+    }
+  };
+  const onSwipeEnd = (e) => {
+    const s = swipeRef.current; if (!s) return;
+    window.removeEventListener('pointermove', onSwipeMove);
+    window.removeEventListener('pointerup', onSwipeEnd);
+    window.removeEventListener('pointercancel', onSwipeEnd);
+    swipeRef.current = null;
+    setAnimating(true);
+    if (s.locked === 'h' && Math.abs(dx) >= 100) {
+      // Commit delete: animate row off, then remove.
+      setRemoving(true);
+      setDx(-600);
+      setTimeout(() => { onRemove(); }, 260);
+    } else {
+      setDx(0);
+    }
+  };
+
+  return (
+    <div className="row-wrapper" style={{
+      position: 'relative',
+      height: removing ? 0 : rowH,
+      // Allow lift shadow to spill outside while dragging-to-reorder; clip swipe reveal otherwise
+      overflow: isDragging ? 'visible' : 'hidden',
+      opacity: removing ? 0 : 1,
+      transition: removing ? 'height .26s ease-out .12s, opacity .26s ease-out' : 'none',
+      zIndex: isDragging ? 20 : 1,
+    }}>
+      {/* Delete reveal — sits underneath the row, on the LEFT (RTL trailing edge) */}
+      <div style={{
+        position: 'absolute', insetBlock: 0, left: 0, right: 0,
+        background: 'linear-gradient(90deg, #c0392b, #a52a1f 45%, transparent)',
+        color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+        display: 'flex', alignItems: 'center', paddingInlineStart: 18, letterSpacing: '.3px',
+        opacity: Math.min(1, Math.abs(dx) / 80),
+        pointerEvents: 'none',
+      }}>מחק ✕</div>
+
+      <div
+        className="notebook-row"
+        onPointerDown={onSwipeStart}
+        style={{
+          height: rowH, display: 'flex', alignItems: 'center', gap: 10,
+          padding: isDragging ? '0 8px' : 0, position: 'relative',
+          background: isDragging ? '#fff' : '#faf3e0',
+          borderRadius: isDragging ? 10 : 0,
+          transform: `translateX(${dx}px) ${isDragging ? 'scale(1.03) rotate(-.4deg)' : ''}`,
+          transition: animating
+            ? 'transform .25s cubic-bezier(.3,1.2,.4,1)'
+            : (isDragging
+                ? 'background .12s, border-radius .12s, padding .12s, box-shadow .12s'
+                : 'transform .15s, opacity .15s, background .15s, border-radius .15s, padding .15s, box-shadow .15s'),
+          boxShadow: isDragging
+            ? `0 12px 22px -6px rgba(0,0,0,.32), 0 0 0 2px ${accent}, 0 0 0 6px ${accent}22`
+            : 'none',
+          opacity: 1,
+          zIndex: isDragging ? 10 : 1,
+          touchAction: 'pan-y',
+          cursor: isDragging ? 'grabbing' : 'grab',
+        }}>
+        {/* Drag handle (left edge in RTL = end of line) */}
+        <button data-row-control onPointerDown={(e) => { e.stopPropagation(); onDragStart(item.id, e); }} style={{
+          background: 'transparent', border: 'none', cursor: 'grab',
+          padding: 4, opacity: .35, touchAction: 'none',
+        }}>
+          <svg width="14" height="18" viewBox="0 0 14 18">
+            <circle cx="4"  cy="4"  r="1.2" fill="#2a241a" />
+            <circle cx="10" cy="4"  r="1.2" fill="#2a241a" />
+            <circle cx="4"  cy="9"  r="1.2" fill="#2a241a" />
+            <circle cx="10" cy="9"  r="1.2" fill="#2a241a" />
+            <circle cx="4"  cy="14" r="1.2" fill="#2a241a" />
+            <circle cx="10" cy="14" r="1.2" fill="#2a241a" />
+          </svg>
+        </button>
+
+        {/* Hand checkbox */}
+        <button data-row-control onClick={(e) => { e.stopPropagation(); onToggle(); }} style={{
+          background: 'transparent', border: 'none', cursor: 'pointer', padding: 2,
+        }}>
+          <HandCheckbox checked={item.done} color={accent} />
+        </button>
+
+        {/* Item text */}
+        <div style={{
+          flex: 1, fontSize: 17, fontWeight: 500,
+          color: item.done ? 'rgba(42,36,26,.4)' : '#2a241a',
+          textDecoration: item.done ? 'line-through' : 'none',
+          textDecorationColor: accent,
+          textDecorationThickness: 1.5,
+          display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+        }}>
+          {item.pinned && (
+            <span style={{
+              background: '#f7d774', color: '#5a3a10',
+              fontSize: 9, fontWeight: 700, padding: '2px 6px',
+              borderRadius: 3, letterSpacing: '.5px',
+              boxShadow: '0 1px 2px rgba(0,0,0,.1), -1px 1px 0 rgba(0,0,0,.04)',
+              transform: 'rotate(-2deg)', flexShrink: 0,
+            }}>קבוע</span>
+          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.text}</span>
+          {item.qty > 1 && (
+            <span style={{
+              fontFamily: 'monospace', fontSize: 13, opacity: .7,
+              background: '#efe8d8', padding: '1px 6px', borderRadius: 6, flexShrink: 0,
+            }}>×{item.qty}</span>
+          )}
+        </div>
+
+        {/* Pin toggle — yellow thumbtack when pinned, faded outline otherwise */}
+        <button data-row-control onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+          title={item.pinned ? 'הסר מהקבועים' : 'הפוך לקבוע'}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer', padding: 4,
+            opacity: item.pinned ? 1 : 0.3,
+            transition: 'opacity .15s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+          <Thumbtack pinned={item.pinned} />
+        </button>
+
+        {showAvatar && <Avatar id={item.by} size={22} />}
+
+        <div style={{ width: 4 }} />
+      </div>
+    </div>
+  );
+}
+
+// ---- Main app ----------------------------------------------
+function NotebookApp() {
+  const g = useGroceries();
+  const [tab, setTab] = React.useState('list');
+  const [draft, setDraft] = React.useState('');
+  const [draftQty, setDraftQty] = React.useState(1);
+  const [openHist, setOpenHist] = React.useState(null);
+  const [dragging, setDragging] = React.useState(null);
+  const [query, setQuery] = React.useState('');
+
+  const accent = ACCENT;
+  const rowH = DENSITY === 'compact' ? 36 : 44;
+  const allDone = g.items.length > 0 && g.items.every((x) => x.done);
+  const showConfetti = SURPRISE && allDone;
+
+  const pinned = g.items.filter((x) => x.pinned);
+  const regular = g.items.filter((x) => !x.pinned);
+  const orderedItems = [...pinned, ...regular];
+  const q = query.trim().toLowerCase();
+  const visibleItems = q ? orderedItems.filter((x) => x.text.toLowerCase().includes(q)) : orderedItems;
+  const suggestions = React.useMemo(
+    () => deriveSuggestions(g.history, g.items),
+    [g.history, g.items]
+  );
+
+  // Drag-to-reorder via pointer events on the drag-handle.
+  const onDragStart = (id, e) => {
+    if (q) return; // skip reorder while a search filter is active
+    e.preventDefault();
+    setDragging(id);
+    const startY = e.clientY;
+    const fromIdx = g.items.findIndex((x) => x.id === id);
+    if (fromIdx < 0) return;
+    let lastIdx = fromIdx;
+    const move = (ev) => {
+      const dy = ev.clientY - startY;
+      const newIdx = Math.max(0, Math.min(g.items.length - 1, fromIdx + Math.round(dy / rowH)));
+      if (newIdx !== lastIdx) {
+        g.reorder(lastIdx, newIdx);
+        lastIdx = newIdx;
+      }
+    };
+    const up = () => {
+      setDragging(null);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onAdd = () => {
+    if (!draft.trim()) return;
+    g.add(draft, draftQty);
+    setDraft(''); setDraftQty(1);
+  };
+
+  return (
+    <div dir="rtl" style={{
+      height: '100%', display: 'flex', flexDirection: 'column',
+      fontFamily: '"Heebo", "Assistant", system-ui, sans-serif',
+      background: '#efe8d8',
+      color: '#2a241a',
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <Confetti fire={showConfetti} />
+
+      <style>{`
+        @keyframes drawcheck { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+        @keyframes pageFlip  { from { opacity: 0; transform: translateY(8px) rotateX(-6deg); } to { opacity: 1; transform: none; } }
+        @keyframes confettiFall {
+          0%   { transform: translateY(-30px) rotate(0);   opacity: 1; }
+          100% { transform: translateY(900px) rotate(720deg); opacity: 0; }
+        }
+        .notebook-row:active { background: rgba(0,0,0,.03); }
+        .notebook-input::placeholder { color: rgba(42,36,26,.4); }
+        .paper-scroll::-webkit-scrollbar { width: 0; height: 0; }
+        .paper-scroll { scrollbar-width: none; }
+      `}</style>
+
+      {/* Top-of-app padding to clear iOS notch / safe-area */}
+      <div style={{
+        height: 'env(safe-area-inset-top, 12px)',
+        background: '#d8cdb3', flexShrink: 0,
+      }} />
+
+      {/* Spiral binding */}
+      <div style={{
+        height: 38, background: '#d8cdb3',
+        borderBottom: '1px solid #b4a583',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around',
+        padding: '0 14px 4px',
+        position: 'relative', zIndex: 5,
+        boxShadow: '0 4px 8px -4px rgba(0,0,0,.18) inset',
+        flexShrink: 0,
+      }}>
+        {Array.from({ length: 14 }).map((_, i) => (
+          <div key={i} style={{
+            width: 10, height: 22,
+            background: '#8a7a5a',
+            borderRadius: 5,
+            boxShadow: 'inset 0 -3px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.4)',
+          }} />
+        ))}
+      </div>
+
+      {/* Title + family avatars */}
+      <div style={{
+        padding: '12px 22px 6px', display: 'flex',
+        alignItems: 'baseline', justifyContent: 'space-between',
+        flexShrink: 0,
+      }}>
+        <div>
+          <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 26, fontWeight: 400, lineHeight: 1.05, letterSpacing: '-.5px' }}>
+            רשימת קניות
+          </div>
+          <div style={{ fontSize: 12, opacity: .55, marginTop: 2 }}>
+            המשפחה · {g.items.length} פריטים
+            {g.offline && <span style={{ color: '#c0392b', fontWeight: 700 }}> · לא מחובר</span>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'row-reverse' }}>
+          {FAMILY.map((f, i) => (
+            <div key={f.id} onClick={() => g.setMe(f.id)} style={{
+              marginInlineStart: i === 0 ? 0 : -6,
+              cursor: 'pointer',
+              outline: g.me === f.id ? `2px solid ${accent}` : 'none',
+              borderRadius: '50%',
+              transition: 'transform .15s',
+              transform: g.me === f.id ? 'translateY(-2px)' : 'none',
+            }}>
+              <Avatar id={f.id} size={26} dark />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab strip */}
+      <div style={{ display: 'flex', gap: 4, padding: '4px 18px 0', position: 'relative', zIndex: 2, flexShrink: 0 }}>
+        {[
+          { id: 'list',    label: 'רשימה' },
+          { id: 'history', label: 'היסטוריה' },
+          { id: 'suggest', label: 'המלצות' },
+        ].map((tt) => (
+          <button key={tt.id} onClick={() => setTab(tt.id)} style={{
+            background: tab === tt.id ? '#faf3e0' : '#e2d8bf',
+            border: 'none', borderTop: `2px solid ${tab === tt.id ? accent : '#c4b896'}`,
+            borderInline: '1px solid #c4b896',
+            padding: '8px 16px 10px',
+            borderRadius: '10px 10px 0 0',
+            fontFamily: 'inherit', fontSize: 13, fontWeight: tab === tt.id ? 700 : 500,
+            color: tab === tt.id ? '#2a241a' : 'rgba(42,36,26,.55)',
+            cursor: 'pointer',
+            marginBottom: tab === tt.id ? -1 : 0,
+            position: 'relative', zIndex: tab === tt.id ? 3 : 1,
+          }}>{tt.label}</button>
+        ))}
+      </div>
+
+      {/* Paper sheet — fixed visual frame; inner div scrolls */}
+      <div style={{
+        flex: 1, minHeight: 0,
+        background: '#faf3e0',
+        margin: '0 14px 0', borderRadius: '6px 6px 18px 18px',
+        boxShadow: '0 1px 0 #fff inset, 0 8px 16px -10px rgba(0,0,0,.2)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        {/* Right-edge strip — same color as the chrome surrounding the paper sheet,
+            so the chrome appears to extend through it (continuous with the 14px gap
+            on the right side of the page). */}
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, right: 0, width: 32,
+          background: '#efe8d8',
+          zIndex: 7, pointerEvents: 'none',
+        }} />
+
+        {/* Red margin line on the right (RTL) — pinned, doesn't scroll */}
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, right: 32, width: 1.5,
+          background: `linear-gradient(180deg, transparent 0, ${accent} 18px, ${accent} 100%)`,
+          opacity: .5, zIndex: 2, pointerEvents: 'none',
+        }} />
+
+        {/* Bottom fade so list dissolves into add-bar */}
+        <div style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0, height: 18,
+          background: 'linear-gradient(180deg, rgba(250,243,224,0), rgba(250,243,224,1))',
+          zIndex: 3, pointerEvents: 'none',
+        }} />
+
+        <div
+          className="paper-scroll"
+          style={{
+            height: '100%',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            backgroundImage: tab === 'list'
+              ? `
+                linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px),
+                repeating-linear-gradient(0deg, transparent 0, transparent 1px, rgba(120,160,200,.36) 1px, rgba(120,160,200,.36) 2px, transparent 2px, transparent ${rowH}px)
+              `
+              : 'linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px)',
+            backgroundPosition: tab === 'list' ? `0 0, 0 ${8 + Math.round(rowH * 0.72)}px` : '0 0',
+            backgroundRepeat: 'repeat',
+          }}>
+
+          {tab === 'list' && (
+            <div key="list" style={{ animation: 'pageFlip .25s ease-out' }}>
+              {/* 60px clearance below the tab strip — scrolls away */}
+              <div style={{ height: 60 }} />
+
+              {/* Sticky search bar */}
+              <div style={{
+                position: 'sticky', top: 0, zIndex: 6,
+                padding: '8px 44px 10px 16px',
+                background: 'linear-gradient(180deg, #faf3e0 0%, #faf3e0 88%, rgba(250,243,224,.96) 100%)',
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'rgba(214, 196, 150, .14)',
+                  borderRadius: 10,
+                  padding: '6px 12px',
+                  boxShadow: `inset 0 0 0 1px ${accent}33`,
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ opacity: .55, flexShrink: 0 }}>
+                    <circle cx="7" cy="7" r="4.2" fill="none" stroke="#2a241a" strokeWidth="1.5" />
+                    <path d="M10 10 L13.5 13.5" stroke="#2a241a" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <input
+                    className="notebook-input"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="חיפוש ברשימה…"
+                    dir="rtl"
+                    style={{
+                      flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                      fontFamily: 'inherit', fontSize: 14, padding: '4px 0', minWidth: 0,
+                      color: '#2a241a',
+                    }} />
+                  {query && (
+                    <button onClick={() => setQuery('')} title="נקה חיפוש" style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      padding: 2, opacity: .45, fontSize: 14, lineHeight: 1, color: '#2a241a',
+                    }}>✕</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Items + empty states */}
+              <div style={{ padding: '4px 44px 120px 16px' }}>
+                {!g.loaded && (
+                  <div style={{ textAlign: 'center', opacity: .4, marginTop: 40, fontStyle: 'italic' }}>טוען…</div>
+                )}
+                {g.loaded && g.items.length === 0 && (
+                  <div style={{ textAlign: 'center', opacity: .4, marginTop: 40, fontStyle: 'italic' }}>
+                    הרשימה ריקה. תוסיף משהו?
+                  </div>
+                )}
+                {g.loaded && g.items.length > 0 && visibleItems.length === 0 && (
+                  <div style={{ textAlign: 'center', opacity: .45, marginTop: 30, fontStyle: 'italic', fontSize: 14 }}>
+                    אין תוצאות עבור "{query}"
+                  </div>
+                )}
+                {visibleItems.map((it) => (
+                  <NotebookRow
+                    key={it.id}
+                    item={it}
+                    rowH={rowH}
+                    accent={accent}
+                    showAvatar
+                    isDragging={dragging === it.id}
+                    onDragStart={onDragStart}
+                    onToggle={() => g.toggle(it.id)}
+                    onRemove={() => g.remove(it.id)}
+                    onTogglePin={() => g.togglePin(it.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'history' && (
+            <div key="hist" style={{ animation: 'pageFlip .25s ease-out', padding: '40px 44px 120px 16px' }}>
+              {g.history.length === 0 && (
+                <div style={{ textAlign: 'center', opacity: .4, marginTop: 60, fontStyle: 'italic' }}>
+                  אין עדיין רשימות שמורות.
+                </div>
+              )}
+              {g.history.map((h) => (
+                <div key={h.id} style={{ marginBottom: 14 }}>
+                  <div onClick={() => setOpenHist(openHist === h.id ? null : h.id)} style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                    cursor: 'pointer', paddingBottom: 4,
+                    borderBottom: `1px dashed ${accent}88`,
+                  }}>
+                    <div>
+                      <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 18, fontWeight: 400 }}>{h.label}</div>
+                      <div style={{ fontSize: 11, opacity: .5 }}>{h.date} · {h.items.length} פריטים</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
+                      {openHist === h.id ? 'סגור' : 'פתח'}
+                    </div>
+                  </div>
+                  {openHist === h.id && (
+                    <div style={{ paddingTop: 8, paddingInlineStart: 8 }}>
+                      {h.items.map((x, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, padding: '3px 0' }}>
+                          <Avatar id={x.by} size={16} />
+                          <span style={{ flex: 1 }}>{x.text}</span>
+                          {x.qty > 1 && <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: .6 }}>×{x.qty}</span>}
+                        </div>
+                      ))}
+                      <button onClick={() => { g.restoreFromHistory(h.id); setTab('list'); }} style={{
+                        marginTop: 8, background: 'transparent', border: `1.5px dashed ${accent}`,
+                        color: accent, fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                        padding: '6px 12px', borderRadius: 10, cursor: 'pointer',
+                      }}>↶ שחזר לרשימה הנוכחית</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === 'suggest' && (
+            <div key="sug" style={{ padding: '60px 44px 120px 16px', animation: 'pageFlip .25s ease-out' }}>
+              <div style={{ fontSize: 12, opacity: .55, marginBottom: 12 }}>
+                לפי ההיסטוריה שלכם:
+              </div>
+              {suggestions.length === 0 && (
+                <div style={{ textAlign: 'center', opacity: .45, marginTop: 30, fontStyle: 'italic', fontSize: 14 }}>
+                  עדיין אין מספיק היסטוריה להצעות.
+                </div>
+              )}
+              {suggestions.map((s, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 0', borderBottom: '1px dashed rgba(0,0,0,.1)',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 500 }}>{s.text}</div>
+                    <div style={{ fontSize: 11, opacity: .5, marginTop: 2 }}>{s.reason}</div>
+                  </div>
+                  <button onClick={() => { g.addSuggestion(s.text); setTab('list'); }} style={{
+                    background: accent, color: '#fff', border: 'none',
+                    width: 30, height: 30, borderRadius: '50%',
+                    fontSize: 18, fontWeight: 700, cursor: 'pointer', lineHeight: 1,
+                    boxShadow: '0 2px 6px -2px rgba(0,0,0,.3)',
+                  }}>+</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add bar (sticky bottom) */}
+      <div style={{
+        padding: '8px 18px 14px',
+        paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
+        background: 'linear-gradient(180deg, rgba(239,232,216,0), #efe8d8 30%)',
+        position: 'relative', zIndex: 4, flexShrink: 0,
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: '#fff', borderRadius: 14,
+          padding: '6px 10px',
+          boxShadow: '0 4px 12px -6px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.04)',
+        }}>
+          <Avatar id={g.me} size={26} dark />
+          <input
+            className="notebook-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+            placeholder="מה לקנות?"
+            dir="rtl"
+            style={{
+              flex: 1, border: 'none', outline: 'none', background: 'transparent',
+              fontFamily: 'inherit', fontSize: 15, padding: '6px 0', minWidth: 0,
+            }} />
+          {draft && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => setDraftQty(Math.max(1, draftQty - 1))} style={{
+                background: '#efe8d8', border: 'none', width: 22, height: 22, borderRadius: '50%',
+                cursor: 'pointer', fontSize: 14, fontWeight: 700,
+              }}>−</button>
+              <span style={{ minWidth: 18, textAlign: 'center', fontFamily: 'monospace', fontSize: 14 }}>{draftQty}</span>
+              <button onClick={() => setDraftQty(draftQty + 1)} style={{
+                background: '#efe8d8', border: 'none', width: 22, height: 22, borderRadius: '50%',
+                cursor: 'pointer', fontSize: 14, fontWeight: 700,
+              }}>+</button>
+            </div>
+          )}
+          <button onClick={onAdd} disabled={!draft.trim()} style={{
+            background: draft.trim() ? accent : '#d4cab3',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '8px 14px', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+            cursor: draft.trim() ? 'pointer' : 'default',
+            transition: 'background .15s',
+          }}>הוסף</button>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 10, padding: '0 4px' }}>
+          <HoldButton color={accent} onComplete={() => { g.reset('רשימת קניות'); setTab('history'); }}>
+            ✂ לחצו להתחלת רשימה חדשה
+          </HoldButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <div id="app-frame"><NotebookApp /></div>
+);
+</script>
+</body>
+</html>
