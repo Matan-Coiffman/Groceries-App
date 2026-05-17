@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="רשימת קניות">
+  <rect width="512" height="512" rx="96" fill="#efe8d8"/>
+  <path d="M126 82h260c28 0 50 22 50 50v284c0 28-22 50-50 50H126c-28 0-50-22-50-50V132c0-28 22-50 50-50Z" fill="#faf3e0" stroke="#c7b88f" stroke-width="10"/>
+  <path d="M116 154h286M116 212h286M116 270h286M116 328h286M116 386h286" stroke="#8aa5c9" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+  <path d="M356 104v344" stroke="#b8556a" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+  <path d="M104 94c20-22 52-22 72 0m-4 0c20-22 52-22 72 0m-4 0c20-22 52-22 72 0m-4 0c20-22 52-22 72 0" fill="none" stroke="#8a7a5a" stroke-width="14" stroke-linecap="round"/>
+  <path d="M150 288c26 25 48 47 72 71 44-64 83-109 142-161" fill="none" stroke="#b8556a" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

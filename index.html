@@ -1,0 +1,1659 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#d8cdb3" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="קניות" />
+    <title>רשימת קניות משפחתית</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Heebo:wght@400;500;600;700;800&family=Suez+One&display=swap" rel="stylesheet" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background:
+          linear-gradient(135deg, rgba(184, 85, 106, 0.18), rgba(90, 122, 72, 0.14)),
+          #d8cdb3;
+        font-family: "Heebo", "Assistant", system-ui, sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .app-shell {
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      .phone-shell {
+        width: min(100vw, 480px);
+        height: 100%;
+        min-height: 0;
+        box-shadow: 0 28px 80px -40px rgba(42, 36, 26, 0.65);
+      }
+
+      .notebook-input::placeholder {
+        color: rgba(42, 36, 26, 0.4);
+      }
+
+      .notebook-row:active {
+        background: #f4ead1;
+      }
+
+      .paper-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(184, 85, 106, 0.35) transparent;
+      }
+
+      .paper-scroll::-webkit-scrollbar {
+        width: 5px;
+      }
+
+      .paper-scroll::-webkit-scrollbar-thumb {
+        background: rgba(184, 85, 106, 0.3);
+        border-radius: 999px;
+      }
+
+      .paper-sheet::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        height: 12px;
+        pointer-events: none;
+        z-index: 4;
+        background: linear-gradient(180deg, rgba(250, 243, 224, 0), #faf3e0);
+      }
+
+      @keyframes drawcheck {
+        from { stroke-dashoffset: 24; }
+        to { stroke-dashoffset: 0; }
+      }
+
+      @keyframes pageFlip {
+        from { opacity: 0; transform: translateY(8px) rotateX(-6deg); }
+        to { opacity: 1; transform: none; }
+      }
+
+      @keyframes wobble {
+        0%, 100% { transform: rotate(-0.4deg); }
+        50% { transform: rotate(0.4deg); }
+      }
+
+      @keyframes confettiFall {
+        0% { transform: translateY(-30px) rotate(0); opacity: 1; }
+        100% { transform: translateY(900px) rotate(720deg); opacity: 0; }
+      }
+
+      @media (min-width: 560px) {
+        .app-shell {
+          padding: 22px 0;
+        }
+
+        .phone-shell {
+          border-radius: 30px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.38);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel">
+      const A_DEFAULTS = {
+        accent: '#b8556a',
+        density: 'comfy',
+        showAvatars: true,
+        surprise: true
+      };
+
+      const FAMILY = [
+        { id: 'avi', name: 'מתן', initial: 'מ', color: '#2c5a7a' },
+        { id: 'ima', name: 'דביר', initial: 'ד', color: '#b8556a' },
+        { id: 'noa', name: 'נטע', initial: 'נ', color: '#c89456' },
+        { id: 'yoa', name: 'לירון', initial: 'ל', color: '#5a7a48' },
+        { id: 'maya', name: 'דויד', initial: 'ד', color: '#7a5a8a' }
+      ];
+
+      const DAY_MS = 24 * 60 * 60 * 1000;
+
+      function uid(prefix = 'i') {
+        return prefix + Math.random().toString(36).slice(2, 9);
+      }
+
+      function emptyState() {
+        return {
+          items: [],
+          history: [],
+          version: 1
+        };
+      }
+
+      function daysAgoFor(entry, idx) {
+        if (Number.isFinite(entry.ts)) return Math.max(0, Math.round((Date.now() - entry.ts) / DAY_MS));
+        if (Number.isFinite(entry.daysAgo)) return entry.daysAgo;
+        return idx * 3;
+      }
+
+      function normalizeState(raw) {
+        const fallback = emptyState();
+        const safe = raw && typeof raw === 'object' ? raw : fallback;
+        const items = Array.isArray(safe.items) ? safe.items : fallback.items;
+        const history = Array.isArray(safe.history) ? safe.history : fallback.history;
+        return {
+          items,
+          history: history.map((entry, idx) => ({ ...entry, daysAgo: daysAgoFor(entry, idx) })),
+          version: Number.isFinite(safe.version) ? safe.version : fallback.version
+        };
+      }
+
+      function familyById(id) {
+        return FAMILY.find((f) => f.id === id) || FAMILY[0];
+      }
+
+      function reasonFor(s) {
+        if (s.count >= 3 && s.mostRecentDays <= 7) return 'נקנה כמעט בכל שבוע';
+        if (s.count >= 2 && s.mostRecentDays <= 7) return 'נקנה לאחרונה — אולי נגמר?';
+        if (s.count >= 2 && s.mostRecentDays > 7) return `נגמר לפני ${Math.round(s.mostRecentDays)} ימים`;
+        if (s.count === 1 && s.mostRecentDays > 7) return 'נקנה פעם, מומלץ לחדש';
+        return 'מומלץ לפי ההיסטוריה';
+      }
+
+      function deriveSuggestions(history, currentItems, max = 6) {
+        const onList = new Set(currentItems.map((x) => x.text));
+        const stats = new Map();
+
+        history.forEach((h, idx) => {
+          const daysAgo = daysAgoFor(h, idx);
+          (h.items || []).forEach((it) => {
+            const s = stats.get(it.text) || { count: 0, mostRecentDays: Infinity, lastBy: it.by };
+            s.count += 1;
+            if (daysAgo < s.mostRecentDays) {
+              s.mostRecentDays = daysAgo;
+              s.lastBy = it.by;
+            }
+            stats.set(it.text, s);
+          });
+        });
+
+        return [...stats.entries()]
+          .filter(([text]) => !onList.has(text))
+          .map(([text, s]) => ({ text, ...s, score: s.count * 2 - Math.min(s.mostRecentDays, 14) / 7 }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, max)
+          .map((s) => ({ text: s.text, reason: reasonFor(s), by: s.lastBy }));
+      }
+
+      function HoldButton({ onComplete, children, color = '#222', dur = 1100 }) {
+        const [pct, setPct] = React.useState(0);
+        const raf = React.useRef(0);
+        const start = React.useRef(0);
+        const active = React.useRef(false);
+
+        const tick = (t) => {
+          if (!active.current) return;
+          if (!start.current) start.current = t;
+          const p = Math.min(1, (t - start.current) / dur);
+          setPct(p);
+          if (p >= 1) {
+            active.current = false;
+            setPct(0);
+            start.current = 0;
+            onComplete && onComplete();
+            return;
+          }
+          raf.current = requestAnimationFrame(tick);
+        };
+
+        const begin = (e) => {
+          e.preventDefault();
+          active.current = true;
+          start.current = 0;
+          raf.current = requestAnimationFrame(tick);
+        };
+
+        const end = () => {
+          active.current = false;
+          start.current = 0;
+          cancelAnimationFrame(raf.current);
+          setPct(0);
+        };
+
+        return (
+          <button
+            type="button"
+            onPointerDown={begin}
+            onPointerUp={end}
+            onPointerLeave={end}
+            onPointerCancel={end}
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              border: `1.5px dashed ${color}`,
+              background: 'transparent',
+              color,
+              fontSize: 14,
+              fontWeight: 600,
+              padding: '10px 18px',
+              borderRadius: 14,
+              cursor: 'pointer',
+              touchAction: 'none',
+              userSelect: 'none',
+              transition: 'transform .12s',
+              transform: pct > 0 ? 'scale(.97)' : 'scale(1)'
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: color,
+                opacity: 0.14,
+                transform: `translateX(${(1 - pct) * 100}%)`,
+                transition: pct === 0 ? 'transform .25s ease-out' : 'none'
+              }}
+            />
+            <span style={{ position: 'relative', zIndex: 1 }}>{children}</span>
+          </button>
+        );
+      }
+
+      function HandCheckbox({ checked, color }) {
+        return (
+          <svg width="22" height="22" viewBox="0 0 22 22" style={{ flexShrink: 0 }}>
+            <path
+              d="M3.5 4 Q3 4.2 3 5 L3.2 17.5 Q3.4 18.2 4.2 18.2 L17.5 18 Q18.4 17.8 18.4 17 L18.2 4.6 Q18 3.8 17.2 3.8 Z"
+              fill="none"
+              stroke={color}
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            {checked && (
+              <path
+                d="M5.5 11.5 Q7 13 9.5 15.5 Q12 12 17 5.5"
+                fill="none"
+                stroke={color}
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ strokeDasharray: 24, strokeDashoffset: 0, animation: 'drawcheck .4s ease-out' }}
+              />
+            )}
+          </svg>
+        );
+      }
+
+      function Avatar({ id, size = 22, dark = false }) {
+        const f = familyById(id);
+        return (
+          <div
+            title={f.name}
+            style={{
+              width: size,
+              height: size,
+              borderRadius: '50%',
+              background: dark ? f.color : `${f.color}22`,
+              color: dark ? '#fff' : f.color,
+              border: `1.2px solid ${f.color}`,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: '"Suez One", "Heebo"',
+              fontSize: size * 0.5,
+              fontWeight: 700,
+              flexShrink: 0,
+              lineHeight: 1
+            }}
+          >
+            {f.initial}
+          </div>
+        );
+      }
+
+      function Confetti({ fire }) {
+        const pieces = React.useMemo(() => {
+          if (!fire) return [];
+          return Array.from({ length: 24 }).map((_, i) => ({
+            left: Math.random() * 100,
+            delay: Math.random() * 0.3,
+            duration: 1.6 + Math.random() * 0.8,
+            color: ['#b8556a', '#2c5a7a', '#5a7a48', '#c89456', '#7a5a8a', '#f7d774'][i % 6],
+            rot: Math.random() * 360,
+            size: 6 + Math.random() * 6
+          }));
+        }, [fire]);
+
+        if (!fire) return null;
+        return (
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 99 }}>
+            {pieces.map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  top: -20,
+                  left: `${p.left}%`,
+                  width: p.size,
+                  height: p.size * 0.6,
+                  background: p.color,
+                  borderRadius: 1,
+                  transform: `rotate(${p.rot}deg)`,
+                  animation: `confettiFall ${p.duration}s ease-in ${p.delay}s forwards`
+                }}
+              />
+            ))}
+          </div>
+        );
+      }
+
+      function useGroceries() {
+        const initial = React.useMemo(emptyState, []);
+        const [items, setItems] = React.useState([]);
+        const [history, setHistory] = React.useState([]);
+        const [version, setVersion] = React.useState(0);
+        const [loading, setLoading] = React.useState(true);
+        const [offline, setOffline] = React.useState(false);
+        const [locked, setLocked] = React.useState(false);
+        const [me, setMeState] = React.useState(() => {
+          try {
+            return localStorage.getItem('grocery-me');
+          } catch (error) {
+            return null;
+          }
+        });
+
+        const stateRef = React.useRef(initial);
+        const versionRef = React.useRef(0);
+        const loadedRef = React.useRef(false);
+        const lockedRef = React.useRef(false);
+        const authRef = React.useRef('');
+        const pendingRef = React.useRef(null);
+        const postTimerRef = React.useRef(null);
+        const saveSeqRef = React.useRef(0);
+        const pollTimerRef = React.useRef(null);
+        const pollDelayRef = React.useRef(30000);
+
+        React.useEffect(() => {
+          try {
+            authRef.current = localStorage.getItem('grocery-pw') || '';
+          } catch (error) {
+            authRef.current = '';
+          }
+        }, []);
+
+        React.useEffect(() => {
+          stateRef.current = { items, history, version };
+          versionRef.current = version;
+        }, [items, history, version]);
+
+        React.useEffect(() => {
+          lockedRef.current = locked;
+        }, [locked]);
+
+        const applyState = React.useCallback((next) => {
+          const normalized = normalizeState(next);
+          setItems(normalized.items);
+          setHistory(normalized.history);
+          setVersion(normalized.version);
+          stateRef.current = normalized;
+          versionRef.current = normalized.version;
+          loadedRef.current = true;
+        }, []);
+
+        const apiFetch = React.useCallback(async (method = 'GET', body, passwordOverride) => {
+          const headers = { Accept: 'application/json' };
+          const password = passwordOverride ?? authRef.current;
+          if (password) headers.Authorization = `Bearer ${password}`;
+          const options = { method, headers };
+          if (body) {
+            headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(body);
+          }
+          return fetch('/api/state', options);
+        }, []);
+
+        const fetchState = React.useCallback(async ({ silent = false, password } = {}) => {
+          try {
+            const res = await apiFetch('GET', null, password);
+            if (res.status === 401) {
+              setLocked(true);
+              setLoading(false);
+              setOffline(false);
+              return false;
+            }
+            if (!res.ok) throw new Error(`GET /api/state ${res.status}`);
+            const remote = await res.json();
+            applyState(remote);
+            setLocked(false);
+            setOffline(false);
+            setLoading(false);
+            pollDelayRef.current = 30000;
+            return true;
+          } catch (error) {
+            setOffline(true);
+            setLoading(false);
+            if (!loadedRef.current && !silent) {
+              applyState(initial);
+            }
+            return false;
+          }
+        }, [apiFetch, applyState, initial]);
+
+        const flushSave = React.useCallback(async () => {
+          const pending = pendingRef.current;
+          if (!pending) return;
+
+          pendingRef.current = null;
+          const seq = ++saveSeqRef.current;
+          const body = {
+            items: pending.items,
+            history: pending.history,
+            baseVersion: pending.baseVersion
+          };
+
+          try {
+            const res = await apiFetch('POST', body);
+            if (res.status === 401) {
+              setLocked(true);
+              setOffline(false);
+              return;
+            }
+            if (res.status === 409) {
+              const latest = await res.json();
+              applyState(latest);
+              setOffline(false);
+              return;
+            }
+            if (!res.ok) throw new Error(`POST /api/state ${res.status}`);
+            const ack = await res.json();
+            if (seq === saveSeqRef.current && Number.isFinite(ack.version)) {
+              setVersion(ack.version);
+              versionRef.current = ack.version;
+            }
+            setOffline(false);
+          } catch (error) {
+            setOffline(true);
+          }
+        }, [apiFetch, applyState]);
+
+        const scheduleSave = React.useCallback((nextState) => {
+          pendingRef.current = {
+            items: nextState.items,
+            history: nextState.history,
+            baseVersion: versionRef.current
+          };
+          if (postTimerRef.current) clearTimeout(postTimerRef.current);
+          postTimerRef.current = setTimeout(flushSave, 250);
+        }, [flushSave]);
+
+        const mutate = React.useCallback((producer) => {
+          const prev = stateRef.current;
+          const next = { ...prev, ...producer(prev) };
+          setItems(next.items);
+          setHistory(next.history);
+          stateRef.current = next;
+          scheduleSave(next);
+        }, [scheduleSave]);
+
+        React.useEffect(() => {
+          fetchState();
+
+          const schedulePoll = (delay = pollDelayRef.current) => {
+            if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = setTimeout(async () => {
+              if (!lockedRef.current && document.visibilityState === 'visible') {
+                const ok = await fetchState({ silent: true });
+                pollDelayRef.current = ok ? 30000 : Math.min(300000, pollDelayRef.current * 2);
+              }
+              schedulePoll(pollDelayRef.current);
+            }, delay);
+          };
+
+          const refetchNow = () => {
+            if (!lockedRef.current) {
+              pollDelayRef.current = 30000;
+              fetchState({ silent: true });
+            }
+          };
+
+          const onVisibility = () => {
+            if (document.visibilityState === 'visible') refetchNow();
+          };
+
+          const onOnline = () => refetchNow();
+
+          window.addEventListener('focus', refetchNow);
+          window.addEventListener('online', onOnline);
+          document.addEventListener('visibilitychange', onVisibility);
+          schedulePoll(30000);
+
+          return () => {
+            if (postTimerRef.current) clearTimeout(postTimerRef.current);
+            if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+            window.removeEventListener('focus', refetchNow);
+            window.removeEventListener('online', onOnline);
+            document.removeEventListener('visibilitychange', onVisibility);
+          };
+        }, [fetchState]);
+
+        const setMe = React.useCallback((id) => {
+          setMeState(id);
+          try {
+            localStorage.setItem('grocery-me', id);
+          } catch (error) {
+          }
+        }, []);
+
+        const unlock = React.useCallback(async (password) => {
+          const trimmed = password.trim();
+          authRef.current = trimmed;
+          const ok = await fetchState({ password: trimmed });
+          if (ok) {
+            try {
+              localStorage.setItem('grocery-pw', trimmed);
+            } catch (error) {
+            }
+          }
+          return ok;
+        }, [fetchState]);
+
+        const add = React.useCallback((text, qty = 1, by = me || 'ima') => {
+          const clean = text.trim();
+          if (!clean) return;
+          mutate((prev) => ({
+            items: [
+              { id: uid(), text: clean, qty, by, done: false, pinned: false, ts: Date.now() },
+              ...prev.items
+            ],
+            history: prev.history
+          }));
+        }, [me, mutate]);
+
+        const remove = React.useCallback((id) => {
+          mutate((prev) => ({ items: prev.items.filter((x) => x.id !== id), history: prev.history }));
+        }, [mutate]);
+
+        const toggle = React.useCallback((id) => {
+          mutate((prev) => ({
+            items: prev.items.map((x) => x.id === id ? { ...x, done: !x.done } : x),
+            history: prev.history
+          }));
+        }, [mutate]);
+
+        const togglePin = React.useCallback((id) => {
+          mutate((prev) => ({
+            items: prev.items.map((x) => x.id === id ? { ...x, pinned: !x.pinned } : x),
+            history: prev.history
+          }));
+        }, [mutate]);
+
+        const setQty = React.useCallback((id, qty) => {
+          mutate((prev) => ({
+            items: prev.items.map((x) => x.id === id ? { ...x, qty: Math.max(1, qty) } : x),
+            history: prev.history
+          }));
+        }, [mutate]);
+
+        const reorder = React.useCallback((fromIdx, toIdx) => {
+          mutate((prev) => {
+            if (toIdx < 0 || toIdx >= prev.items.length || fromIdx === toIdx) {
+              return { items: prev.items, history: prev.history };
+            }
+            const nextItems = prev.items.slice();
+            const [it] = nextItems.splice(fromIdx, 1);
+            nextItems.splice(toIdx, 0, it);
+            return { items: nextItems, history: prev.history };
+          });
+        }, [mutate]);
+
+        const reset = React.useCallback((label = 'רשימה') => {
+          const current = stateRef.current.items;
+          if (!current.length) return;
+          mutate((prev) => ({
+            history: [
+              {
+                id: 'h' + Date.now(),
+                label,
+                date: 'היום',
+                ts: Date.now(),
+                items: prev.items.map((x) => ({ text: x.text, qty: x.qty, by: x.by }))
+              },
+              ...prev.history
+            ],
+            items: prev.items.filter((x) => x.pinned).map((x) => ({ ...x, done: false }))
+          }));
+        }, [mutate]);
+
+        const restoreFromHistory = React.useCallback((histId) => {
+          const h = stateRef.current.history.find((x) => x.id === histId);
+          if (!h) return;
+          mutate((prev) => {
+            const existing = new Set(prev.items.map((x) => x.text));
+            const adds = (h.items || [])
+              .filter((x) => !existing.has(x.text))
+              .map((x) => ({
+                id: uid(),
+                text: x.text,
+                qty: x.qty || 1,
+                by: x.by || me || 'ima',
+                done: false,
+                pinned: false,
+                ts: Date.now()
+              }));
+            return { items: [...adds, ...prev.items], history: prev.history };
+          });
+        }, [me, mutate]);
+
+        const addSuggestion = React.useCallback((text) => add(text, 1, me || 'ima'), [add, me]);
+
+        return {
+          items,
+          history,
+          version,
+          loading,
+          offline,
+          locked,
+          me,
+          setMe,
+          unlock,
+          add,
+          remove,
+          toggle,
+          togglePin,
+          setQty,
+          reorder,
+          reset,
+          restoreFromHistory,
+          addSuggestion
+        };
+      }
+
+      function LockScreen({ onUnlock, accent }) {
+        const [password, setPassword] = React.useState('');
+        const [busy, setBusy] = React.useState(false);
+        const [error, setError] = React.useState('');
+
+        const submit = async (event) => {
+          event.preventDefault();
+          if (!password.trim()) return;
+          setBusy(true);
+          setError('');
+          const ok = await onUnlock(password);
+          setBusy(false);
+          if (!ok) setError('הסיסמה לא נכונה');
+        };
+
+        return (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 120,
+            background: 'rgba(42, 36, 26, 0.42)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            backdropFilter: 'blur(4px)'
+          }}>
+            <form onSubmit={submit} style={{
+              width: 'min(100%, 320px)',
+              background: '#faf3e0',
+              border: '1px solid #c4b896',
+              borderRadius: 12,
+              padding: 20,
+              boxShadow: '0 20px 50px -26px rgba(0,0,0,.55)'
+            }}>
+              <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 24, marginBottom: 6 }}>רשימה משפחתית</div>
+              <div style={{ fontSize: 13, opacity: 0.62, marginBottom: 14 }}>הכניסו את הסיסמה המשותפת כדי לפתוח.</div>
+              <input
+                autoFocus
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="סיסמה"
+                dir="rtl"
+                style={{
+                  width: '100%',
+                  border: '1px solid #d2c5a8',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  outline: 'none',
+                  background: '#fff',
+                  marginBottom: 10
+                }}
+              />
+              {error && <div style={{ color: '#a52a1f', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+              <button
+                type="submit"
+                disabled={busy || !password.trim()}
+                style={{
+                  width: '100%',
+                  border: 'none',
+                  borderRadius: 10,
+                  background: busy || !password.trim() ? '#d4cab3' : accent,
+                  color: '#fff',
+                  padding: '10px 12px',
+                  fontWeight: 800,
+                  cursor: busy || !password.trim() ? 'default' : 'pointer'
+                }}
+              >
+                {busy ? 'פותח…' : 'פתח'}
+              </button>
+            </form>
+          </div>
+        );
+      }
+
+      function IdentityPicker({ onPick, accent }) {
+        return (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 110,
+            background: 'rgba(239, 232, 216, 0.86)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            backdropFilter: 'blur(3px)'
+          }}>
+            <div style={{
+              width: 'min(100%, 340px)',
+              background: '#faf3e0',
+              border: '1px solid #c4b896',
+              borderRadius: 14,
+              padding: 22,
+              textAlign: 'center',
+              boxShadow: '0 20px 50px -28px rgba(0,0,0,.5)'
+            }}>
+              <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 26, marginBottom: 6 }}>מי אתה?</div>
+              <div style={{ fontSize: 13, opacity: 0.58, marginBottom: 18 }}>בחרו מי מוסיף עכשיו לרשימה</div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {FAMILY.map((f) => (
+                  <button
+                    type="button"
+                    key={f.id}
+                    onClick={() => onPick(f.id)}
+                    style={{
+                      border: `2px solid ${f.color}`,
+                      background: '#fff',
+                      color: f.color,
+                      borderRadius: 12,
+                      padding: 10,
+                      cursor: 'pointer',
+                      width: 82,
+                      boxShadow: `0 4px 0 ${accent}22`
+                    }}
+                  >
+                    <Avatar id={f.id} size={56} dark />
+                    <div style={{ marginTop: 7, fontSize: 13, fontWeight: 700 }}>{f.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function SearchIcon({ color = '#2a241a' }) {
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}>
+            <circle cx="11" cy="11" r="7" fill="none" stroke={color} strokeWidth="2" />
+            <path d="M16.5 16.5 21 21" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        );
+      }
+
+      function PinIcon({ active, color }) {
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M14 3 21 10 18 11.5 14.5 15 15 21 12 18 9 21 9.5 15 6 11.5 3 10 10 3Z"
+              fill={active ? color : 'none'}
+              stroke={color}
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+          </svg>
+        );
+      }
+
+      function SwipeRow({ it, rowH, accent, dragging, dragDisabled, onDragStart, g, showAvatars }) {
+        const [dx, setDx] = React.useState(0);
+        const [animating, setAnimating] = React.useState(false);
+        const rowRef = React.useRef(null);
+        const dxRef = React.useRef(0);
+        const cleanupRef = React.useRef(null);
+        const thresholdHitRef = React.useRef(false);
+
+        React.useEffect(() => () => {
+          cleanupRef.current && cleanupRef.current();
+        }, []);
+
+        const onSwipeStart = (event) => {
+          if (event.button && event.button !== 0) return;
+          if (event.target.closest('[data-no-swipe="true"]')) return;
+
+          const startX = event.clientX;
+          const startY = event.clientY;
+          let mode = null;
+          setAnimating(false);
+          thresholdHitRef.current = false;
+
+          const move = (ev) => {
+            const rawDx = ev.clientX - startX;
+            const rawDy = ev.clientY - startY;
+            const absDx = Math.abs(rawDx);
+            const absDy = Math.abs(rawDy);
+
+            if (!mode) {
+              if (absDx < 6 && absDy < 6) return;
+              mode = absDx > absDy && rawDx < 0 ? 'swipe' : 'ignore';
+            }
+
+            if (mode !== 'swipe') return;
+            ev.preventDefault();
+            const width = rowRef.current?.offsetWidth || 320;
+            const next = Math.max(-width, Math.min(0, rawDx));
+            dxRef.current = next;
+            setDx(next);
+
+            if (Math.abs(next) >= 100 && !thresholdHitRef.current) {
+              thresholdHitRef.current = true;
+              if (navigator.vibrate) navigator.vibrate(8);
+            }
+            if (Math.abs(next) < 100) thresholdHitRef.current = false;
+          };
+
+          const up = () => {
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+            window.removeEventListener('pointercancel', up);
+            cleanupRef.current = null;
+
+            if (mode === 'swipe' && Math.abs(dxRef.current) >= 100) {
+              const width = rowRef.current?.offsetWidth || 320;
+              setAnimating(true);
+              setDx(-width);
+              window.setTimeout(() => g.remove(it.id), 230);
+            } else if (mode === 'swipe') {
+              setAnimating(true);
+              setDx(0);
+              window.setTimeout(() => setAnimating(false), 250);
+            }
+            dxRef.current = 0;
+          };
+
+          window.addEventListener('pointermove', move, { passive: false });
+          window.addEventListener('pointerup', up);
+          window.addEventListener('pointercancel', up);
+          cleanupRef.current = up;
+        };
+
+        const isDragging = dragging === it.id;
+
+        return (
+          <div
+            ref={rowRef}
+            className="row-wrapper"
+            style={{ position: 'relative', height: rowH, overflow: 'hidden' }}
+          >
+            <div
+              className="row-delete"
+              style={{
+                position: 'absolute',
+                insetBlock: 0,
+                left: 0,
+                width: '100%',
+                background: 'linear-gradient(90deg, #c0392b, #a52a1f 40%, transparent)',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                paddingInlineStart: 18,
+                opacity: Math.min(1, Math.abs(dx) / 80)
+              }}
+            >
+              מחק
+            </div>
+
+            <div
+              className="notebook-row"
+              onPointerDown={onSwipeStart}
+              style={{
+                height: rowH,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                position: 'relative',
+                opacity: isDragging ? 0.6 : 1,
+                transform: `${isDragging ? 'scale(1.02) ' : ''}translateX(${dx}px)`,
+                transition: animating ? 'transform .25s ease-out' : isDragging ? 'none' : 'transform .15s, opacity .15s',
+                zIndex: isDragging ? 10 : 1,
+                background: '#faf3e0',
+                touchAction: 'pan-y',
+                userSelect: 'none'
+              }}
+            >
+              <button
+                type="button"
+                data-no-swipe="true"
+                aria-label="סידור מחדש"
+                title={dragDisabled ? 'ניקוי חיפוש כדי לסדר מחדש' : 'גרירה לסידור'}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onDragStart(it.id, e);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: dragDisabled ? 'default' : 'grab',
+                  padding: 4,
+                  opacity: dragDisabled ? 0.16 : 0.35,
+                  touchAction: 'none',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <svg width="14" height="18" viewBox="0 0 14 18" aria-hidden="true">
+                  <circle cx="4" cy="4" r="1.2" fill="#2a241a" />
+                  <circle cx="10" cy="4" r="1.2" fill="#2a241a" />
+                  <circle cx="4" cy="9" r="1.2" fill="#2a241a" />
+                  <circle cx="10" cy="9" r="1.2" fill="#2a241a" />
+                  <circle cx="4" cy="14" r="1.2" fill="#2a241a" />
+                  <circle cx="10" cy="14" r="1.2" fill="#2a241a" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                data-no-swipe="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => g.toggle(it.id)}
+                aria-label={it.done ? 'סמן כלא נקנה' : 'סמן כנקנה'}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  display: 'flex'
+                }}
+              >
+                <HandCheckbox checked={it.done} color={accent} />
+              </button>
+
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 17,
+                  fontWeight: 500,
+                  color: it.done ? 'rgba(42,36,26,.4)' : '#2a241a',
+                  textDecoration: it.done ? 'line-through' : 'none',
+                  textDecorationColor: accent,
+                  textDecorationThickness: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                {it.pinned && (
+                  <span style={{
+                    background: '#f7d774',
+                    color: '#5a3a10',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 3,
+                    boxShadow: '0 1px 2px rgba(0,0,0,.1), -1px 1px 0 rgba(0,0,0,.04)',
+                    transform: 'rotate(-2deg)',
+                    flexShrink: 0
+                  }}>
+                    קבוע
+                  </span>
+                )}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.text}</span>
+                {it.qty > 1 && (
+                  <span style={{
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    opacity: 0.7,
+                    background: '#efe8d8',
+                    padding: '1px 6px',
+                    borderRadius: 6,
+                    flexShrink: 0
+                  }}>
+                    ×{it.qty}
+                  </span>
+                )}
+              </div>
+
+              {showAvatars !== false && <Avatar id={it.by} size={22} />}
+
+              <button
+                type="button"
+                data-no-swipe="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => g.togglePin(it.id)}
+                aria-label={it.pinned ? 'בטל קיבוע' : 'קבע פריט'}
+                title={it.pinned ? 'בטל קיבוע' : 'קבע פריט'}
+                style={{
+                  width: 28,
+                  height: 28,
+                  border: 'none',
+                  background: it.pinned ? '#f7d77466' : 'transparent',
+                  color: accent,
+                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  opacity: it.pinned ? 1 : 0.38
+                }}
+              >
+                <PinIcon active={it.pinned} color={accent} />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      function NotebookApp({ tweaks = A_DEFAULTS }) {
+        const g = useGroceries();
+        const [tab, setTab] = React.useState('list');
+        const [draft, setDraft] = React.useState('');
+        const [draftQty, setDraftQty] = React.useState(1);
+        const [openHist, setOpenHist] = React.useState(null);
+        const [dragging, setDragging] = React.useState(null);
+        const [query, setQuery] = React.useState('');
+
+        const accent = tweaks.accent || A_DEFAULTS.accent;
+        const rowH = tweaks.density === 'compact' ? 36 : 44;
+        const allDone = g.items.length > 0 && g.items.every((x) => x.done);
+        const showConfetti = tweaks.surprise !== false && allDone;
+
+        const pinned = g.items.filter((x) => x.pinned);
+        const regular = g.items.filter((x) => !x.pinned);
+        const orderedItems = [...pinned, ...regular];
+        const q = query.trim().toLowerCase();
+        const visibleItems = q ? orderedItems.filter((x) => x.text.toLowerCase().includes(q)) : orderedItems;
+        const suggestions = React.useMemo(() => deriveSuggestions(g.history, g.items), [g.history, g.items]);
+
+        const onDragStart = (id, e) => {
+          if (q) return;
+          e.preventDefault();
+          setDragging(id);
+          const startY = e.clientY;
+          const fromIdx = g.items.findIndex((x) => x.id === id);
+          let lastIdx = fromIdx;
+
+          const move = (ev) => {
+            const dy = ev.clientY - startY;
+            const newIdx = Math.max(0, Math.min(g.items.length - 1, fromIdx + Math.round(dy / rowH)));
+            if (newIdx !== lastIdx) {
+              g.reorder(lastIdx, newIdx);
+              lastIdx = newIdx;
+            }
+          };
+
+          const up = () => {
+            setDragging(null);
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+          };
+
+          window.addEventListener('pointermove', move);
+          window.addEventListener('pointerup', up);
+        };
+
+        const onAdd = () => {
+          if (!draft.trim()) return;
+          g.add(draft, draftQty);
+          setDraft('');
+          setDraftQty(1);
+        };
+
+        const paperBackground = tab === 'list'
+          ? `
+            linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px),
+            repeating-linear-gradient(0deg, transparent 0, transparent 1px, rgba(120,160,200,.36) 1px, rgba(120,160,200,.36) 2px, transparent 2px, transparent ${rowH}px)
+          `
+          : 'linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px)';
+
+        if (g.loading) {
+          return (
+            <div dir="rtl" style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#efe8d8',
+              color: '#2a241a',
+              fontSize: 18,
+              fontWeight: 700
+            }}>
+              טוען…
+            </div>
+          );
+        }
+
+        return (
+          <div dir="rtl" style={{
+            height: '100%',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#efe8d8',
+            color: '#2a241a',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <Confetti fire={showConfetti} />
+
+            <div style={{
+              height: 'calc(36px + env(safe-area-inset-top))',
+              flexShrink: 0,
+              background: '#d8cdb3'
+            }} />
+
+            <div style={{
+              height: 38,
+              background: '#d8cdb3',
+              borderBottom: '1px solid #b4a583',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-around',
+              padding: '0 14px 4px',
+              position: 'relative',
+              zIndex: 5,
+              boxShadow: '0 4px 8px -4px rgba(0,0,0,.18) inset'
+            }}>
+              {Array.from({ length: 14 }).map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: 10,
+                    height: 22,
+                    background: '#8a7a5a',
+                    borderRadius: 5,
+                    boxShadow: 'inset 0 -3px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.4)'
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ padding: '12px 22px 6px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 26, fontWeight: 400, lineHeight: 1.05, letterSpacing: 0 }}>
+                  רשימת קניות
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>המשפחה · {g.items.length} פריטים</span>
+                  {g.offline && (
+                    <span style={{
+                      color: '#a52a1f',
+                      background: '#f5d8d4',
+                      borderRadius: 6,
+                      padding: '1px 6px',
+                      fontWeight: 700
+                    }}>
+                      לא מחובר
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'row-reverse' }}>
+                {FAMILY.map((f, i) => (
+                  <button
+                    type="button"
+                    key={f.id}
+                    onClick={() => g.setMe(f.id)}
+                    style={{
+                      marginInlineStart: i === 0 ? 0 : -6,
+                      cursor: 'pointer',
+                      outline: g.me === f.id ? `2px solid ${accent}` : 'none',
+                      borderRadius: '50%',
+                      transition: 'transform .15s',
+                      transform: g.me === f.id ? 'translateY(-2px)' : 'none',
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0
+                    }}
+                    aria-label={`בחר ${f.name}`}
+                  >
+                    <Avatar id={f.id} size={26} dark />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 4, padding: '4px 18px 0', position: 'relative', zIndex: 2 }}>
+              {[
+                { id: 'list', label: 'רשימה' },
+                { id: 'history', label: 'היסטוריה' },
+                { id: 'suggest', label: 'הצעות' }
+              ].map((t) => (
+                <button
+                  type="button"
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  style={{
+                    background: tab === t.id ? '#faf3e0' : '#e2d8bf',
+                    border: 'none',
+                    borderTop: `2px solid ${tab === t.id ? accent : '#c4b896'}`,
+                    borderInline: '1px solid #c4b896',
+                    padding: '8px 16px 10px',
+                    borderRadius: '10px 10px 0 0',
+                    fontSize: 13,
+                    fontWeight: tab === t.id ? 700 : 500,
+                    color: tab === t.id ? '#2a241a' : 'rgba(42,36,26,.55)',
+                    cursor: 'pointer',
+                    marginBottom: tab === t.id ? -1 : 0,
+                    position: 'relative',
+                    zIndex: tab === t.id ? 3 : 1
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div
+              className="paper-sheet"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                background: '#faf3e0',
+                margin: '0 14px 0',
+                borderRadius: '6px 6px 18px 18px',
+                boxShadow: '0 1px 0 #fff inset, 0 8px 16px -10px rgba(0,0,0,.2)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                right: 32,
+                width: 1.5,
+                background: `linear-gradient(180deg, transparent 0, ${accent} 18px, ${accent} 100%)`,
+                opacity: 0.5,
+                zIndex: 2,
+                pointerEvents: 'none'
+              }} />
+
+              <div
+                className="paper-scroll"
+                style={{
+                  height: '100%',
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  backgroundImage: paperBackground,
+                  backgroundPosition: tab === 'list' ? `0 0, 0 ${8 + Math.round(rowH * 0.72)}px` : '0 0'
+                }}
+              >
+                {tab === 'list' && (
+                  <div key="list" style={{ animation: 'pageFlip .25s ease-out', margin: '52px 0 0', padding: '7px 44px 96px 16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: '#fff',
+                      borderRadius: 14,
+                      padding: '7px 11px',
+                      marginBottom: 12,
+                      boxShadow: '0 4px 12px -8px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.04)'
+                    }}>
+                      <SearchIcon color="rgba(42,36,26,.52)" />
+                      <input
+                        className="notebook-input"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="חיפוש ברשימה…"
+                        dir="rtl"
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          border: 'none',
+                          outline: 'none',
+                          background: 'transparent',
+                          fontSize: 14,
+                          padding: '3px 0'
+                        }}
+                      />
+                      {query && (
+                        <button
+                          type="button"
+                          onClick={() => setQuery('')}
+                          aria-label="נקה חיפוש"
+                          style={{
+                            border: 'none',
+                            background: '#efe8d8',
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            color: '#2a241a',
+                            lineHeight: 1
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {g.items.length === 0 && (
+                      <div style={{ textAlign: 'center', opacity: 0.4, marginTop: 60, fontStyle: 'italic' }}>
+                        הרשימה ריקה. תוסיף משהו?
+                      </div>
+                    )}
+
+                    {g.items.length > 0 && visibleItems.length === 0 && (
+                      <div style={{ textAlign: 'center', opacity: 0.48, marginTop: 46, fontStyle: 'italic' }}>
+                        אין תוצאות עבור "{query}"
+                      </div>
+                    )}
+
+                    {visibleItems.map((it) => (
+                      <SwipeRow
+                        key={it.id}
+                        it={it}
+                        rowH={rowH}
+                        accent={accent}
+                        dragging={dragging}
+                        dragDisabled={Boolean(q)}
+                        onDragStart={onDragStart}
+                        g={g}
+                        showAvatars={tweaks.showAvatars}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {tab === 'history' && (
+                  <div key="hist" style={{ animation: 'pageFlip .25s ease-out', padding: '40px 44px 100px 16px' }}>
+                    {g.history.map((h) => (
+                      <div key={h.id} style={{ marginBottom: 14 }}>
+                        <div
+                          onClick={() => setOpenHist(openHist === h.id ? null : h.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            paddingBottom: 4,
+                            borderBottom: `1px dashed ${accent}88`
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontFamily: '"Suez One", "Heebo"', fontSize: 18, fontWeight: 400 }}>{h.label}</div>
+                            <div style={{ fontSize: 11, opacity: 0.5 }}>{h.date} · {h.items.length} פריטים</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
+                            {openHist === h.id ? 'סגור' : 'פתח'}
+                          </div>
+                        </div>
+                        {openHist === h.id && (
+                          <div style={{ paddingTop: 8, paddingInlineStart: 8 }}>
+                            {h.items.map((x, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, padding: '3px 0' }}>
+                                <Avatar id={x.by} size={16} />
+                                <span style={{ flex: 1 }}>{x.text}</span>
+                                {x.qty > 1 && <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.6 }}>×{x.qty}</span>}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                g.restoreFromHistory(h.id);
+                                setTab('list');
+                              }}
+                              style={{
+                                marginTop: 8,
+                                background: 'transparent',
+                                border: `1.5px dashed ${accent}`,
+                                color: accent,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                padding: '6px 12px',
+                                borderRadius: 10,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ↶ שחזר לרשימה הנוכחית
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {tab === 'suggest' && (
+                  <div key="sug" style={{ padding: '40px 44px 100px 16px', animation: 'pageFlip .25s ease-out' }}>
+                    <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 12 }}>
+                      לפי ההיסטוריה שלכם:
+                    </div>
+                    {suggestions.length === 0 && (
+                      <div style={{ fontSize: 14, opacity: 0.45, fontStyle: 'italic', paddingTop: 20 }}>
+                        עדיין אין מספיק היסטוריה להצעות
+                      </div>
+                    )}
+                    {suggestions.map((s, i) => (
+                      <div
+                        key={`${s.text}-${i}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '10px 0',
+                          borderBottom: '1px dashed rgba(0,0,0,.1)'
+                        }}
+                      >
+                        <Avatar id={s.by} size={20} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 16, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {s.text}
+                          </div>
+                          <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>{s.reason}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            g.addSuggestion(s.text);
+                            setTab('list');
+                          }}
+                          style={{
+                            background: accent,
+                            color: '#fff',
+                            border: 'none',
+                            width: 30,
+                            height: 30,
+                            borderRadius: '50%',
+                            fontSize: 18,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px -2px rgba(0,0,0,.3)'
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{
+              padding: '8px 18px calc(14px + env(safe-area-inset-bottom))',
+              background: 'linear-gradient(180deg, rgba(239,232,216,0), #efe8d8 30%)',
+              position: 'relative',
+              zIndex: 4
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#fff',
+                borderRadius: 14,
+                padding: '6px 10px',
+                boxShadow: '0 4px 12px -6px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.04)'
+              }}>
+                <Avatar id={g.me || 'ima'} size={26} dark />
+                <input
+                  className="notebook-input"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+                  placeholder="מה לקנות?"
+                  dir="rtl"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    fontSize: 15,
+                    padding: '6px 0'
+                  }}
+                />
+                {draft && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => setDraftQty(Math.max(1, draftQty - 1))}
+                      style={{
+                        background: '#efe8d8',
+                        border: 'none',
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        fontWeight: 700
+                      }}
+                    >
+                      −
+                    </button>
+                    <span style={{ minWidth: 18, textAlign: 'center', fontFamily: 'monospace', fontSize: 14 }}>{draftQty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setDraftQty(draftQty + 1)}
+                      style={{
+                        background: '#efe8d8',
+                        border: 'none',
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        fontWeight: 700
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={onAdd}
+                  disabled={!draft.trim()}
+                  style={{
+                    background: draft.trim() ? accent : '#d4cab3',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '8px 14px',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: draft.trim() ? 'pointer' : 'default',
+                    transition: 'background .15s'
+                  }}
+                >
+                  הוסף
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 10, padding: '0 4px', gap: 12 }}>
+                <HoldButton color={accent} onComplete={() => {
+                  g.reset('רשימת קניות');
+                  setTab('history');
+                }}>
+                  ✂ לחצו להתחלת רשימה חדשה
+                </HoldButton>
+              </div>
+            </div>
+
+            {g.locked && <LockScreen onUnlock={g.unlock} accent={accent} />}
+            {!g.locked && g.me === null && <IdentityPicker onPick={g.setMe} accent={accent} />}
+          </div>
+        );
+      }
+
+      function App() {
+        return (
+          <div className="app-shell">
+            <div className="phone-shell">
+              <NotebookApp />
+            </div>
+          </div>
+        );
+      }
+
+      Object.assign(window, {
+        useGroceries,
+        FAMILY,
+        familyById,
+        deriveSuggestions,
+        Confetti,
+        NotebookApp,
+        A_DEFAULTS,
+        HoldButton,
+        Avatar
+      });
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>

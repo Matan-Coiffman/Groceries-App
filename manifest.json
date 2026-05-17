@@ -1,0 +1,20 @@
+{
+  "name": "רשימת קניות משפחתית",
+  "short_name": "קניות",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#efe8d8",
+  "theme_color": "#d8cdb3",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
