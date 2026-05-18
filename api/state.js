@@ -30,24 +30,11 @@ function normalizeForRead(state) {
   };
 }
 
-function getMemoryState() {
-  return globalThis.__familyGroceriesState || null;
-}
-
-function setMemoryState(state) {
-  globalThis.__familyGroceriesState = state;
-}
-
 async function readStoredState() {
-  if (!HAS_KV) return getMemoryState();
   return kv.get(KEY);
 }
 
 async function writeStoredState(state) {
-  if (!HAS_KV) {
-    setMemoryState(state);
-    return;
-  }
   await kv.set(KEY, state);
 }
 
@@ -83,6 +70,10 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (!HAS_KV) {
+      return res.status(503).json({ error: 'missing_kv_env' });
+    }
+
     if (req.method === 'GET') {
       return res.status(200).json(await ensureState());
     }

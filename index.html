@@ -151,6 +151,7 @@
       ];
 
       const DAY_MS = 24 * 60 * 60 * 1000;
+      const LOCAL_CACHE_KEY = 'family-groceries-cache-v1';
 
       function uid(prefix = 'i') {
         return prefix + Math.random().toString(36).slice(2, 9);
@@ -180,6 +181,22 @@
           history: history.map((entry, idx) => ({ ...entry, daysAgo: daysAgoFor(entry, idx) })),
           version: Number.isFinite(safe.version) ? safe.version : fallback.version
         };
+      }
+
+      function readCachedState() {
+        try {
+          const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+          return raw ? normalizeState(JSON.parse(raw)) : null;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function writeCachedState(state) {
+        try {
+          localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(normalizeState(state)));
+        } catch (error) {
+        }
       }
 
       function familyById(id) {
@@ -406,6 +423,9 @@
         const pendingRef = React.useRef(null);
         const postTimerRef = React.useRef(null);
         const saveSeqRef = React.useRef(0);
+        const dirtyRef = React.useRef(false);
+        const savingRef = React.useRef(false);
+        const saveRetryDelayRef = React.useRef(2000);
         const pollTimerRef = React.useRef(null);
         const pollDelayRef = React.useRef(30000);
 
@@ -434,6 +454,7 @@
           stateRef.current = normalized;
           versionRef.current = normalized.version;
           loadedRef.current = true;
+          writeCachedState(normalized);
         }, []);
 
         const apiFetch = React.useCallback(async (method = 'GET', body, passwordOverride) => {
@@ -459,6 +480,13 @@
             }
             if (!res.ok) throw new Error(`GET /api/state ${res.status}`);
             const remote = await res.json();
+            if (dirtyRef.current || pendingRef.current || savingRef.current) {
+              setLocked(false);
+              setOffline(false);
+              setLoading(false);
+              pollDelayRef.current = 30000;
+              return true;
+            }
             applyState(remote);
             setLocked(false);
             setOffline(false);
@@ -469,7 +497,7 @@
             setOffline(true);
             setLoading(false);
             if (!loadedRef.current && !silent) {
-              applyState(initial);
+              applyState(readCachedState() || initial);
             }
             return false;
           }
@@ -477,9 +505,9 @@
 
         const flushSave = React.useCallback(async () => {
           const pending = pendingRef.current;
-          if (!pending) return;
+          if (!pending || savingRef.current) return;
 
-          pendingRef.current = null;
+          savingRef.current = true;
           const seq = ++saveSeqRef.current;
           const body = {
             items: pending.items,
@@ -496,19 +524,48 @@
             }
             if (res.status === 409) {
               const latest = await res.json();
-              applyState(latest);
+              if (pendingRef.current === pending) {
+                pendingRef.current = null;
+                dirtyRef.current = false;
+                saveRetryDelayRef.current = 2000;
+                applyState(latest);
+              } else if (pendingRef.current) {
+                pendingRef.current = { ...pendingRef.current, baseVersion: latest.version };
+                if (postTimerRef.current) clearTimeout(postTimerRef.current);
+                postTimerRef.current = setTimeout(flushSave, 250);
+              }
               setOffline(false);
               return;
             }
             if (!res.ok) throw new Error(`POST /api/state ${res.status}`);
             const ack = await res.json();
-            if (seq === saveSeqRef.current && Number.isFinite(ack.version)) {
-              setVersion(ack.version);
-              versionRef.current = ack.version;
+            if (Number.isFinite(ack.version)) {
+              if (seq === saveSeqRef.current) {
+                setVersion(ack.version);
+                versionRef.current = ack.version;
+                stateRef.current = { ...stateRef.current, version: ack.version };
+                writeCachedState(stateRef.current);
+              }
+              if (pendingRef.current === pending) {
+                pendingRef.current = null;
+                dirtyRef.current = false;
+                saveRetryDelayRef.current = 2000;
+              } else if (pendingRef.current) {
+                pendingRef.current = { ...pendingRef.current, baseVersion: ack.version };
+                if (postTimerRef.current) clearTimeout(postTimerRef.current);
+                postTimerRef.current = setTimeout(flushSave, 250);
+              }
             }
             setOffline(false);
           } catch (error) {
             setOffline(true);
+            if (pendingRef.current) {
+              if (postTimerRef.current) clearTimeout(postTimerRef.current);
+              postTimerRef.current = setTimeout(flushSave, saveRetryDelayRef.current);
+              saveRetryDelayRef.current = Math.min(30000, saveRetryDelayRef.current * 2);
+            }
+          } finally {
+            savingRef.current = false;
           }
         }, [apiFetch, applyState]);
 
@@ -528,6 +585,8 @@
           setItems(next.items);
           setHistory(next.history);
           stateRef.current = next;
+          dirtyRef.current = true;
+          writeCachedState(next);
           scheduleSave(next);
         }, [scheduleSave]);
 
@@ -589,9 +648,13 @@
               localStorage.setItem('grocery-pw', trimmed);
             } catch (error) {
             }
+            if (pendingRef.current) {
+              if (postTimerRef.current) clearTimeout(postTimerRef.current);
+              postTimerRef.current = setTimeout(flushSave, 250);
+            }
           }
           return ok;
-        }, [fetchState]);
+        }, [fetchState, flushSave]);
 
         const add = React.useCallback((text, qty = 1, by = me || 'ima') => {
           const clean = text.trim();

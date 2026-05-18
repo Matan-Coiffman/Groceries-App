@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev:kv": "if [ -f .env.local ]; then set -a; . ./.env.local; set +a; fi; vercel dev --listen 3002"
+  },
   "dependencies": {
     "@vercel/kv": "^3.0.0"
   }
