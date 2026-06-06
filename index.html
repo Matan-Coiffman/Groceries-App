@@ -146,29 +146,27 @@
         }
       }
 
-      @keyframes binAppear {
+      @keyframes scribbleStrike {
         from {
-          opacity: 0;
-          transform: scale(0.8) translateY(12px);
+          stroke-dashoffset: 360;
         }
         to {
-          opacity: 1;
-          transform: scale(1) translateY(0);
+          stroke-dashoffset: 0;
         }
       }
 
-      @keyframes binGlow {
-        0%,
-        100% {
-          box-shadow:
-            0 8px 24px -8px rgba(184, 85, 106, 0.27),
-            0 0 0 4px rgba(184, 85, 106, 0.09);
-        }
-        50% {
-          box-shadow:
-            0 12px 32px -8px rgba(184, 85, 106, 0.4),
-            0 0 0 8px rgba(184, 85, 106, 0.15);
-        }
+      .row-del {
+        opacity: 0.32;
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+      }
+      .row-del:hover {
+        opacity: 0.62;
+      }
+      .row-del:active {
+        opacity: 0.9;
+        transform: scale(0.88);
       }
 
       @media (min-width: 560px) {
@@ -1192,25 +1190,112 @@
         showAvatars,
       }) {
         const isDragging = dragging === it.id;
+        const [confirming, setConfirming] = React.useState(false);
+        const [deleting, setDeleting] = React.useState(false);
+        const confirmTimerRef = React.useRef(null);
+        const docDownRef = React.useRef(null);
+        const controlRef = React.useRef(null);
+
+        const disarm = React.useCallback(() => {
+          if (confirmTimerRef.current) {
+            clearTimeout(confirmTimerRef.current);
+            confirmTimerRef.current = null;
+          }
+          if (docDownRef.current) {
+            document.removeEventListener(
+              "pointerdown",
+              docDownRef.current,
+              true,
+            );
+            docDownRef.current = null;
+          }
+        }, []);
+
+        const revert = React.useCallback(() => {
+          disarm();
+          setConfirming(false);
+        }, [disarm]);
+
+        React.useEffect(() => () => disarm(), [disarm]);
+
+        const onDeleteTap = () => {
+          if (deleting) return;
+          if (!confirming) {
+            setConfirming(true);
+            confirmTimerRef.current = setTimeout(revert, 3000);
+            const handler = (ev) => {
+              if (
+                controlRef.current &&
+                !controlRef.current.contains(ev.target)
+              ) {
+                revert();
+              }
+            };
+            docDownRef.current = handler;
+            document.addEventListener("pointerdown", handler, true);
+            return;
+          }
+          disarm();
+          setConfirming(false);
+          setDeleting(true);
+          setTimeout(() => g.remove(it.id), 450);
+        };
 
         return (
           <div
             className="notebook-row"
             style={{
-              height: rowH,
+              height: deleting ? 0 : rowH,
               display: "flex",
               alignItems: "center",
               gap: 10,
               position: "relative",
-              opacity: isDragging ? 0.6 : 1,
-              transform: isDragging ? "scale(1.02)" : "none",
-              transition: "transform .15s, opacity .15s",
+              opacity: deleting ? 0 : isDragging ? 0.6 : 1,
+              transform: deleting
+                ? "scale(0.94) rotate(-1.5deg)"
+                : isDragging
+                  ? "scale(1.02)"
+                  : "none",
+              transformOrigin: "right center",
+              transition: deleting
+                ? "height .3s ease .12s, transform .3s ease .12s, opacity .38s ease"
+                : "transform .15s, opacity .15s",
+              overflow: deleting ? "hidden" : "visible",
+              pointerEvents: deleting ? "none" : undefined,
               zIndex: isDragging ? 10 : 1,
               background: "#faf3e0",
               touchAction: "pan-y",
               userSelect: "none",
             }}
           >
+            {deleting && (
+              <svg
+                width="100%"
+                height="100%"
+                viewBox="0 0 300 40"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 5,
+                }}
+              >
+                <path
+                  d="M6 25 Q42 11 80 22 T152 20 T224 25 T296 15"
+                  fill="none"
+                  stroke={accent}
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    strokeDasharray: 360,
+                    animation: "scribbleStrike .3s ease-out forwards",
+                  }}
+                />
+              </svg>
+            )}
             <button
               type="button"
               aria-label="סידור מחדש"
@@ -1346,104 +1431,70 @@
             >
               <PinIcon active={it.pinned} color={accent} />
             </button>
-          </div>
-        );
-      }
 
-      function TrashBin({ hovering, accent, visible }) {
-        const binRef = React.useRef(null);
-
-        React.useEffect(() => {
-          if (visible && binRef.current) {
-            window.__trashBinEl = binRef.current;
-          } else {
-            window.__trashBinEl = null;
-          }
-          return () => {
-            window.__trashBinEl = null;
-          };
-        }, [visible]);
-
-        if (!visible) return null;
-
-        return (
-          <div
-            ref={binRef}
-            className="trash-bin"
-            style={{
-              position: "absolute",
-              bottom: "calc(100px + env(safe-area-inset-bottom))",
-              left: 22,
-              zIndex: 100,
-              width: 64,
-              height: 72,
-              background: hovering ? `${accent}18` : "#faf3e0",
-              border: `2px dashed ${hovering ? accent : "#c4b896"}`,
-              borderRadius: 14,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
-              boxShadow: hovering
-                ? `0 8px 24px -8px ${accent}44, 0 0 0 4px ${accent}18`
-                : "0 4px 14px -6px rgba(0,0,0,.18)",
-              transform: hovering ? "scale(1.15)" : "scale(1)",
-              transition:
-                "transform .2s ease-out, box-shadow .2s ease-out, background .2s, border-color .2s",
-              animation: "binAppear .3s ease-out",
-              pointerEvents: "none",
-            }}
-          >
-            <svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true">
-              <path
-                d="M3 8 L4.5 6.5 L21.5 6.5 L23 8"
-                fill="none"
-                stroke={hovering ? accent : "#8a7a5a"}
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5.5 8 L6.5 26 Q6.7 28 8.5 28 L17.5 28 Q19.3 28 19.5 26 L20.5 8"
-                fill="none"
-                stroke={hovering ? accent : "#8a7a5a"}
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M10 12 L10 24"
-                fill="none"
-                stroke={hovering ? accent : "#8a7a5a"}
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-              <path
-                d="M13 12 L13 24"
-                fill="none"
-                stroke={hovering ? accent : "#8a7a5a"}
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-              <path
-                d="M16 12 L16 24"
-                fill="none"
-                stroke={hovering ? accent : "#8a7a5a"}
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: hovering ? accent : "#8a7a5a",
-                transition: "color .2s",
-              }}
+            <button
+              ref={controlRef}
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={onDeleteTap}
+              aria-label={confirming ? "אישור מחיקה" : "מחק פריט"}
+              title={confirming ? "מחק?" : "מחק"}
+              className={confirming ? undefined : "row-del"}
+              style={
+                confirming
+                  ? {
+                      border: "none",
+                      background: accent,
+                      color: "#fff",
+                      borderRadius: 999,
+                      padding: "3px 9px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      boxShadow: "0 2px 6px -2px rgba(0,0,0,.32)",
+                      animation: "wobble .5s ease-in-out",
+                    }
+                  : {
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      padding: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }
+              }
             >
-              מחק
-            </span>
+              {confirming ? (
+                "מחק?"
+              ) : (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 4 Q8 7 12 12"
+                    fill="none"
+                    stroke="#2a241a"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M12 4 Q8 9 4 12"
+                    fill="none"
+                    stroke="#2a241a"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+            </button>
           </div>
         );
       }
@@ -1474,29 +1525,15 @@
           [g.history, g.items],
         );
 
-        const [isOverBin, setIsOverBin] = React.useState(false);
-
         const onDragStart = (id, e) => {
           if (q) return;
           e.preventDefault();
           setDragging(id);
-          setIsOverBin(false);
           const startY = e.clientY;
           const fromIdx = g.items.findIndex((x) => x.id === id);
           let lastIdx = fromIdx;
 
           const move = (ev) => {
-            const binEl = window.__trashBinEl;
-            if (binEl) {
-              const rect = binEl.getBoundingClientRect();
-              const over =
-                ev.clientX >= rect.left &&
-                ev.clientX <= rect.right &&
-                ev.clientY >= rect.top &&
-                ev.clientY <= rect.bottom;
-              setIsOverBin(over);
-            }
-
             const dy = ev.clientY - startY;
             const newIdx = Math.max(
               0,
@@ -1508,21 +1545,8 @@
             }
           };
 
-          const up = (ev) => {
-            const binEl = window.__trashBinEl;
-            if (binEl) {
-              const rect = binEl.getBoundingClientRect();
-              const over =
-                ev.clientX >= rect.left &&
-                ev.clientX <= rect.right &&
-                ev.clientY >= rect.top &&
-                ev.clientY <= rect.bottom;
-              if (over) {
-                g.remove(id);
-              }
-            }
+          const up = () => {
             setDragging(null);
-            setIsOverBin(false);
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", up);
           };
@@ -1581,12 +1605,6 @@
             }}
           >
             <Confetti fire={showConfetti} />
-
-            <TrashBin
-              hovering={isOverBin}
-              accent={accent}
-              visible={dragging !== null}
-            />
 
             <div
               style={{
