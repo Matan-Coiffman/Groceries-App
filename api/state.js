@@ -5,10 +5,21 @@ const LIST_PASSWORD = process.env.LIST_PASSWORD || '';
 const HAS_KV = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const DEFAULT_SECTIONS = [
+  { id: 'sec_produce', name: 'פירות וירקות' },
+  { id: 'sec_dairy', name: 'מוצרי חלב' },
+  { id: 'sec_meat', name: 'בשר ודגים' },
+  { id: 'sec_bakery', name: 'מאפים' },
+  { id: 'sec_frozen', name: 'קפואים' },
+  { id: 'sec_dry', name: 'יבשים' },
+  { id: 'sec_clean', name: 'ניקיון' }
+];
+
 function emptyState() {
   return {
     items: [],
     history: [],
+    sections: DEFAULT_SECTIONS,
     version: 1
   };
 }
@@ -23,9 +34,11 @@ function normalizeForRead(state) {
   const safe = state && typeof state === 'object' ? state : emptyState();
   const items = Array.isArray(safe.items) ? safe.items : [];
   const history = Array.isArray(safe.history) ? safe.history : [];
+  const sections = Array.isArray(safe.sections) ? safe.sections : DEFAULT_SECTIONS;
   return {
     items,
     history: history.map((entry, idx) => ({ ...entry, daysAgo: daysAgoFor(entry, idx) })),
+    sections,
     version: Number.isFinite(safe.version) ? safe.version : 1
   };
 }
@@ -90,6 +103,7 @@ export default async function handler(req, res) {
       const next = {
         items: Array.isArray(body.items) ? body.items : current.items,
         history: Array.isArray(body.history) ? body.history : current.history,
+        sections: Array.isArray(body.sections) ? body.sections : current.sections,
         version: current.version + 1
       };
 

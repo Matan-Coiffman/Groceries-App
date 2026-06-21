@@ -210,6 +210,16 @@
         { id: "maya", name: "דויד", initial: "ד", color: "#7a5a8a" },
       ];
 
+      const DEFAULT_SECTIONS = [
+        { id: "sec_produce", name: "פירות וירקות" },
+        { id: "sec_dairy", name: "מוצרי חלב" },
+        { id: "sec_meat", name: "בשר ודגים" },
+        { id: "sec_bakery", name: "מאפים" },
+        { id: "sec_frozen", name: "קפואים" },
+        { id: "sec_dry", name: "יבשים" },
+        { id: "sec_clean", name: "ניקיון" },
+      ];
+
       const DAY_MS = 24 * 60 * 60 * 1000;
       const LOCAL_CACHE_KEY = "family-groceries-cache-v1";
 
@@ -221,6 +231,7 @@
         return {
           items: [],
           history: [],
+          sections: DEFAULT_SECTIONS,
           version: 1,
         };
       }
@@ -239,12 +250,16 @@
         const history = Array.isArray(safe.history)
           ? safe.history
           : fallback.history;
+        const sections = Array.isArray(safe.sections)
+          ? safe.sections
+          : fallback.sections;
         return {
           items,
           history: history.map((entry, idx) => ({
             ...entry,
             daysAgo: daysAgoFor(entry, idx),
           })),
+          sections,
           version: Number.isFinite(safe.version)
             ? safe.version
             : fallback.version,
@@ -513,6 +528,7 @@
         const initial = React.useMemo(emptyState, []);
         const [items, setItems] = React.useState([]);
         const [history, setHistory] = React.useState([]);
+        const [sections, setSections] = React.useState([]);
         const [version, setVersion] = React.useState(0);
         const [loading, setLoading] = React.useState(true);
         const [offline, setOffline] = React.useState(false);
@@ -548,9 +564,9 @@
         }, []);
 
         React.useEffect(() => {
-          stateRef.current = { items, history, version };
+          stateRef.current = { items, history, sections, version };
           versionRef.current = version;
-        }, [items, history, version]);
+        }, [items, history, sections, version]);
 
         React.useEffect(() => {
           lockedRef.current = locked;
@@ -560,6 +576,7 @@
           const normalized = normalizeState(next);
           setItems(normalized.items);
           setHistory(normalized.history);
+          setSections(normalized.sections);
           setVersion(normalized.version);
           stateRef.current = normalized;
           versionRef.current = normalized.version;
@@ -628,6 +645,7 @@
           const body = {
             items: pending.items,
             history: pending.history,
+            sections: pending.sections,
             baseVersion: pending.baseVersion,
           };
 
@@ -705,6 +723,7 @@
             pendingRef.current = {
               items: nextState.items,
               history: nextState.history,
+              sections: nextState.sections,
               baseVersion: versionRef.current,
             };
             if (postTimerRef.current) clearTimeout(postTimerRef.current);
@@ -719,6 +738,7 @@
             const next = { ...prev, ...producer(prev) };
             setItems(next.items);
             setHistory(next.history);
+            setSections(next.sections);
             stateRef.current = next;
             dirtyRef.current = true;
             writeCachedState(next);
@@ -800,7 +820,7 @@
         );
 
         const add = React.useCallback(
-          (text, qty = 1, by = me || "ima") => {
+          (text, qty = 1, by = me || "ima", section = null) => {
             const clean = text.trim();
             if (!clean) return;
             const key = clean.toLowerCase();
@@ -828,6 +848,7 @@
                     text: clean,
                     qty,
                     by,
+                    section,
                     done: false,
                     pinned: false,
                     ts: Date.now(),
@@ -883,6 +904,75 @@
               ),
               history: prev.history,
             }));
+          },
+          [mutate],
+        );
+
+        const setItemSection = React.useCallback(
+          (id, section) => {
+            mutate((prev) => ({
+              items: prev.items.map((x) =>
+                x.id === id ? { ...x, section: section || null } : x,
+              ),
+              history: prev.history,
+            }));
+          },
+          [mutate],
+        );
+
+        const addSection = React.useCallback(
+          (name) => {
+            const clean = (name || "").trim();
+            if (!clean) return null;
+            const id = uid("sec");
+            mutate((prev) => ({
+              sections: [...prev.sections, { id, name: clean }],
+            }));
+            return id;
+          },
+          [mutate],
+        );
+
+        const renameSection = React.useCallback(
+          (id, name) => {
+            const clean = (name || "").trim();
+            if (!clean) return;
+            mutate((prev) => ({
+              sections: prev.sections.map((s) =>
+                s.id === id ? { ...s, name: clean } : s,
+              ),
+            }));
+          },
+          [mutate],
+        );
+
+        const removeSection = React.useCallback(
+          (id) => {
+            mutate((prev) => ({
+              sections: prev.sections.filter((s) => s.id !== id),
+              items: prev.items.map((x) =>
+                x.section === id ? { ...x, section: null } : x,
+              ),
+            }));
+          },
+          [mutate],
+        );
+
+        const reorderSections = React.useCallback(
+          (from, to) => {
+            mutate((prev) => {
+              if (
+                from < 0 ||
+                to < 0 ||
+                from >= prev.sections.length ||
+                to >= prev.sections.length
+              )
+                return {};
+              const next = [...prev.sections];
+              const [moved] = next.splice(from, 1);
+              next.splice(to, 0, moved);
+              return { sections: next };
+            });
           },
           [mutate],
         );
@@ -964,6 +1054,7 @@
         return {
           items,
           history,
+          sections,
           version,
           loading,
           offline,
@@ -976,6 +1067,11 @@
           toggle,
           togglePin,
           setQty,
+          setItemSection,
+          addSection,
+          renameSection,
+          removeSection,
+          reorderSections,
           reorder,
           reset,
           restoreFromHistory,
@@ -1186,6 +1282,10 @@
         const confirmTimerRef = React.useRef(null);
         const docDownRef = React.useRef(null);
         const controlRef = React.useRef(null);
+        const [secMenu, setSecMenu] = React.useState(false);
+        const [menuPos, setMenuPos] = React.useState(null);
+        const secMenuRef = React.useRef(null);
+        const menuRef = React.useRef(null);
 
         const disarm = React.useCallback(() => {
           if (confirmTimerRef.current) {
@@ -1208,6 +1308,19 @@
         }, [disarm]);
 
         React.useEffect(() => () => disarm(), [disarm]);
+
+        React.useEffect(() => {
+          if (!secMenu) return;
+          const handler = (ev) => {
+            const inIcon =
+              secMenuRef.current && secMenuRef.current.contains(ev.target);
+            const inMenu = menuRef.current && menuRef.current.contains(ev.target);
+            if (!inIcon && !inMenu) setSecMenu(false);
+          };
+          document.addEventListener("pointerdown", handler, true);
+          return () =>
+            document.removeEventListener("pointerdown", handler, true);
+        }, [secMenu]);
 
         const onDeleteTap = () => {
           if (deleting) return;
@@ -1287,41 +1400,7 @@
                 />
               </svg>
             )}
-            <button
-              type="button"
-              aria-label="סידור מחדש"
-              title={
-                dragDisabled ? "ניקוי חיפוש כדי לסדר מחדש" : "גרירה לסידור"
-              }
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                onDragStart(it.id, e);
-              }}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: dragDisabled ? "default" : "grab",
-                padding: 4,
-                opacity: dragDisabled ? 0.16 : 0.35,
-                touchAction: "none",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <svg
-                width="14"
-                height="18"
-                viewBox="0 0 14 18"
-                aria-hidden="true"
-              >
-                <circle cx="4" cy="4" r="1.2" fill="#2a241a" />
-                <circle cx="10" cy="4" r="1.2" fill="#2a241a" />
-                <circle cx="4" cy="9" r="1.2" fill="#2a241a" />
-                <circle cx="10" cy="9" r="1.2" fill="#2a241a" />
-                <circle cx="4" cy="14" r="1.2" fill="#2a241a" />
-                <circle cx="10" cy="14" r="1.2" fill="#2a241a" />
-              </svg>
-            </button>
+            {/* item drag-reorder removed — sections provide ordering */}
 
             <button
               type="button"
@@ -1423,6 +1502,129 @@
               <PinIcon active={it.pinned} color={accent} />
             </button>
 
+            <span ref={secMenuRef} style={{ flexShrink: 0 }}>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  if (secMenu) {
+                    setSecMenu(false);
+                    return;
+                  }
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const menuW = 150;
+                  let left = r.right - menuW;
+                  if (left < 8) left = 8;
+                  if (left + menuW > window.innerWidth - 8)
+                    left = window.innerWidth - 8 - menuW;
+                  const openUp =
+                    window.innerHeight - r.bottom < 280 && r.top > 280;
+                  setMenuPos({
+                    left: Math.round(left),
+                    top: openUp ? null : Math.round(r.bottom + 4),
+                    bottom: openUp
+                      ? Math.round(window.innerHeight - r.top + 4)
+                      : null,
+                  });
+                  setSecMenu(true);
+                }}
+                aria-label="העבר למדור"
+                title="העבר למדור"
+                style={{
+                  width: 28,
+                  height: 28,
+                  border: "none",
+                  background: secMenu ? "#efe8d8" : "transparent",
+                  color: accent,
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  opacity: secMenu ? 1 : 0.5,
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2.5 3.5 H8 L13.5 8 L8 12.5 H2.5 Z"
+                    fill="none"
+                    stroke="#2a241a"
+                    strokeWidth="1.4"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="5.2" cy="8" r="1.05" fill="#2a241a" />
+                </svg>
+              </button>
+              {secMenu &&
+                menuPos &&
+                ReactDOM.createPortal(
+                  <div
+                    ref={menuRef}
+                    style={{
+                      position: "fixed",
+                      left: menuPos.left,
+                      top: menuPos.top != null ? menuPos.top : undefined,
+                      bottom:
+                        menuPos.bottom != null ? menuPos.bottom : undefined,
+                      background: "#fff",
+                      border: "1px solid rgba(0,0,0,.12)",
+                      borderRadius: 10,
+                      boxShadow: "0 12px 28px -8px rgba(0,0,0,.45)",
+                      zIndex: 9999,
+                      minWidth: 150,
+                      maxHeight: 280,
+                      overflowY: "auto",
+                      padding: 4,
+                    }}
+                  >
+                    {[{ id: null, name: "ללא מדור" }, ...g.sections].map((s) => {
+                      const cur = (it.section || null) === s.id;
+                      return (
+                        <button
+                          key={s.id || "none"}
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => {
+                            g.setItemSection(it.id, s.id);
+                            setSecMenu(false);
+                          }}
+                          dir="rtl"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            width: "100%",
+                            textAlign: "start",
+                            border: "none",
+                            background: cur ? "#efe8d8" : "transparent",
+                            color: "#2a241a",
+                            borderRadius: 7,
+                            padding: "8px 10px",
+                            fontSize: 13,
+                            fontWeight: cur ? 700 : 500,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span
+                            style={{ width: 12, color: accent, flexShrink: 0 }}
+                          >
+                            {cur ? "✓" : ""}
+                          </span>
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>,
+                  document.body,
+                )}
+            </span>
+
             <button
               ref={controlRef}
               type="button"
@@ -1490,13 +1692,230 @@
         );
       }
 
+      function SectionHeader({
+        section,
+        uncategorized,
+        count,
+        accent,
+        index,
+        total,
+        g,
+        disabled,
+        onDragStart,
+        dragging,
+      }) {
+        const [editing, setEditing] = React.useState(false);
+        const [name, setName] = React.useState(section ? section.name : "");
+        const [confirmDel, setConfirmDel] = React.useState(false);
+        const delTimerRef = React.useRef(null);
+
+        React.useEffect(() => {
+          if (section) setName(section.name);
+        }, [section ? section.name : null]);
+
+        React.useEffect(
+          () => () => {
+            if (delTimerRef.current) clearTimeout(delTimerRef.current);
+          },
+          [],
+        );
+
+        const headerStyle = {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginTop: 16,
+          marginBottom: 2,
+          paddingBottom: 3,
+          borderBottom: `2px solid ${accent}55`,
+        };
+        const countStyle = {
+          fontSize: 11,
+          opacity: 0.5,
+          fontFamily: "monospace",
+          flexShrink: 0,
+        };
+        const iconBtn = (enabled) => ({
+          background: "transparent",
+          border: "none",
+          cursor: enabled ? "pointer" : "default",
+          fontSize: 14,
+          lineHeight: 1,
+          padding: "2px 5px",
+          color: "#2a241a",
+          opacity: enabled ? 0.55 : 0.18,
+          flexShrink: 0,
+        });
+
+        if (uncategorized) {
+          return (
+            <div style={{ ...headerStyle, opacity: 0.72 }}>
+              <span
+                style={{
+                  fontFamily: '"Suez One", "Heebo"',
+                  fontSize: 15,
+                  color: "#6b6048",
+                  flex: 1,
+                }}
+              >
+                ללא מדור
+              </span>
+              <span style={countStyle}>{count}</span>
+            </div>
+          );
+        }
+
+        const commitRename = () => {
+          setEditing(false);
+          const t = name.trim();
+          if (t && t !== section.name) g.renameSection(section.id, t);
+          else setName(section.name);
+        };
+
+        return (
+          <div
+            data-sec-index={index}
+            style={{ ...headerStyle, opacity: dragging ? 0.4 : 1 }}
+          >
+            {!disabled && !editing && onDragStart && (
+              <button
+                type="button"
+                aria-label="גרור לסידור מדורים"
+                title="גרירה לסידור מדורים"
+                onPointerDown={(e) => onDragStart(index, e)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "grab",
+                  padding: "2px 4px",
+                  opacity: 0.45,
+                  touchAction: "none",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <svg
+                  width="14"
+                  height="16"
+                  viewBox="0 0 14 16"
+                  aria-hidden="true"
+                >
+                  <circle cx="4" cy="4" r="1.2" fill={accent} />
+                  <circle cx="10" cy="4" r="1.2" fill={accent} />
+                  <circle cx="4" cy="8" r="1.2" fill={accent} />
+                  <circle cx="10" cy="8" r="1.2" fill={accent} />
+                  <circle cx="4" cy="12" r="1.2" fill={accent} />
+                  <circle cx="10" cy="12" r="1.2" fill={accent} />
+                </svg>
+              </button>
+            )}
+            {editing ? (
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") {
+                    setName(section.name);
+                    setEditing(false);
+                  }
+                }}
+                dir="rtl"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "none",
+                  borderBottom: `1px solid ${accent}`,
+                  outline: "none",
+                  background: "transparent",
+                  fontFamily: '"Suez One", "Heebo"',
+                  fontSize: 16,
+                  color: accent,
+                  padding: "0 0 2px",
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => !disabled && setEditing(true)}
+                title={disabled ? undefined : "שנה שם"}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: "start",
+                  background: "transparent",
+                  border: "none",
+                  fontFamily: '"Suez One", "Heebo"',
+                  fontSize: 16,
+                  fontWeight: 400,
+                  color: accent,
+                  cursor: disabled ? "default" : "text",
+                  padding: 0,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {section.name}
+              </button>
+            )}
+            <span style={countStyle}>{count}</span>
+            {!disabled && !editing && (
+              <React.Fragment>
+                {confirmDel ? (
+                  <button
+                    type="button"
+                    onClick={() => g.removeSection(section.id)}
+                    style={{
+                      border: "none",
+                      background: accent,
+                      color: "#fff",
+                      borderRadius: 999,
+                      padding: "2px 8px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    מחק?
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDel(true);
+                      delTimerRef.current = setTimeout(
+                        () => setConfirmDel(false),
+                        3000,
+                      );
+                    }}
+                    aria-label="מחק מדור"
+                    title="מחק מדור"
+                    style={iconBtn(true)}
+                  >
+                    ✕
+                  </button>
+                )}
+              </React.Fragment>
+            )}
+          </div>
+        );
+      }
+
       function NotebookApp({ tweaks = A_DEFAULTS }) {
         const g = useGroceries();
         const [tab, setTab] = React.useState("list");
         const [draft, setDraft] = React.useState("");
         const [draftQty, setDraftQty] = React.useState(1);
         const [openHist, setOpenHist] = React.useState(null);
-        const [dragging, setDragging] = React.useState(null);
+        const [draggingSection, setDraggingSection] = React.useState(null);
+        const [activeSection, setActiveSection] = React.useState(null);
+        const [creatingSection, setCreatingSection] = React.useState(false);
+        const [newSectionName, setNewSectionName] = React.useState("");
 
         const accent = tweaks.accent || A_DEFAULTS.accent;
         const rowH = tweaks.density === "compact" ? 36 : 44;
@@ -1515,28 +1934,56 @@
           [g.history, g.items],
         );
 
-        const onDragStart = (id, e) => {
+        const groups = React.useMemo(() => {
+          const ids = new Set(g.sections.map((s) => s.id));
+          const bySec = {};
+          const uncategorized = [];
+          visibleItems.forEach((it) => {
+            if (it.section && ids.has(it.section)) {
+              (bySec[it.section] = bySec[it.section] || []).push(it);
+            } else {
+              uncategorized.push(it);
+            }
+          });
+          return { bySec, uncategorized };
+        }, [visibleItems, g.sections]);
+
+        const onSectionDragStart = (index, e) => {
           if (q) return;
           e.preventDefault();
-          setDragging(id);
-          const startY = e.clientY;
-          const fromIdx = g.items.findIndex((x) => x.id === id);
-          let lastIdx = fromIdx;
+          e.stopPropagation();
+          const sec = g.sections[index];
+          setDraggingSection(sec ? sec.id : null);
+          let lastIdx = index;
 
           const move = (ev) => {
-            const dy = ev.clientY - startY;
-            const newIdx = Math.max(
-              0,
-              Math.min(g.items.length - 1, fromIdx + Math.round(dy / rowH)),
-            );
-            if (newIdx !== lastIdx) {
-              g.reorder(lastIdx, newIdx);
-              lastIdx = newIdx;
+            const headers = [
+              ...document.querySelectorAll("[data-sec-index]"),
+            ].map((h) => {
+              const r = h.getBoundingClientRect();
+              return {
+                idx: Number(h.dataset.secIndex),
+                mid: r.top + r.height / 2,
+              };
+            });
+            if (!headers.length) return;
+            let best = lastIdx;
+            let bestDist = Infinity;
+            for (const h of headers) {
+              const d = Math.abs(h.mid - ev.clientY);
+              if (d < bestDist) {
+                bestDist = d;
+                best = h.idx;
+              }
+            }
+            if (best !== lastIdx) {
+              g.reorderSections(lastIdx, best);
+              lastIdx = best;
             }
           };
 
           const up = () => {
-            setDragging(null);
+            setDraggingSection(null);
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", up);
           };
@@ -1547,9 +1994,25 @@
 
         const onAdd = () => {
           if (!draft.trim()) return;
-          g.add(draft, draftQty);
+          g.add(draft, draftQty, g.me || "ima", activeSection);
           setDraft("");
           setDraftQty(1);
+        };
+
+        const createSection = () => {
+          const t = newSectionName.trim();
+          setCreatingSection(false);
+          setNewSectionName("");
+          if (!t) return;
+          const existing = g.sections.find(
+            (s) => s.name.trim().toLowerCase() === t.toLowerCase(),
+          );
+          if (existing) {
+            setActiveSection(existing.id);
+            return;
+          }
+          const id = g.addSection(t);
+          if (id) setActiveSection(id);
         };
 
         const paperBackground =
@@ -1800,6 +2263,107 @@
                       <div
                         style={{
                           display: "flex",
+                          gap: 6,
+                          overflowX: "auto",
+                          marginBottom: 8,
+                          paddingBottom: 2,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setActiveSection(null)}
+                          style={{
+                            flexShrink: 0,
+                            border:
+                              activeSection === null
+                                ? `1.5px solid ${accent}`
+                                : "1px solid #d8cdb3",
+                            background: activeSection === null ? accent : "#fff",
+                            color: activeSection === null ? "#fff" : "#2a241a",
+                            borderRadius: 999,
+                            padding: "4px 11px",
+                            fontSize: 12,
+                            fontWeight: activeSection === null ? 700 : 500,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ללא מדור
+                        </button>
+                        {g.sections.map((s) => (
+                          <button
+                            type="button"
+                            key={s.id}
+                            onClick={() => setActiveSection(s.id)}
+                            style={{
+                              flexShrink: 0,
+                              border:
+                                activeSection === s.id
+                                  ? `1.5px solid ${accent}`
+                                  : "1px solid #d8cdb3",
+                              background: activeSection === s.id ? accent : "#fff",
+                              color: activeSection === s.id ? "#fff" : "#2a241a",
+                              borderRadius: 999,
+                              padding: "4px 11px",
+                              fontSize: 12,
+                              fontWeight: activeSection === s.id ? 700 : 500,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {s.name}
+                          </button>
+                        ))}
+                        {creatingSection ? (
+                          <input
+                            autoFocus
+                            value={newSectionName}
+                            onChange={(e) => setNewSectionName(e.target.value)}
+                            onBlur={createSection}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") createSection();
+                              if (e.key === "Escape") {
+                                setCreatingSection(false);
+                                setNewSectionName("");
+                              }
+                            }}
+                            placeholder="שם מדור…"
+                            dir="rtl"
+                            style={{
+                              flexShrink: 0,
+                              width: 110,
+                              border: `1.5px solid ${accent}`,
+                              borderRadius: 999,
+                              padding: "4px 11px",
+                              fontSize: 12,
+                              outline: "none",
+                              background: "#fff",
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setCreatingSection(true)}
+                            style={{
+                              flexShrink: 0,
+                              border: `1px dashed ${accent}`,
+                              background: "transparent",
+                              color: accent,
+                              borderRadius: 999,
+                              padding: "4px 11px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            + מדור
+                          </button>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
                           alignItems: "center",
                           gap: 8,
                           background: "#fff",
@@ -1957,19 +2521,54 @@
                       </div>
                     )}
 
-                    {visibleItems.map((it) => (
-                      <ItemRow
-                        key={it.id}
-                        it={it}
-                        rowH={rowH}
-                        accent={accent}
-                        dragging={dragging}
-                        dragDisabled={Boolean(q)}
-                        onDragStart={onDragStart}
-                        g={g}
-                        showAvatars={tweaks.showAvatars}
-                      />
-                    ))}
+                    {groups.uncategorized.length > 0 && (
+                      <React.Fragment>
+                        <SectionHeader
+                          uncategorized
+                          count={groups.uncategorized.length}
+                          accent={accent}
+                        />
+                        {groups.uncategorized.map((it) => (
+                          <ItemRow
+                            key={it.id}
+                            it={it}
+                            rowH={rowH}
+                            accent={accent}
+                            g={g}
+                            showAvatars={tweaks.showAvatars}
+                          />
+                        ))}
+                      </React.Fragment>
+                    )}
+                    {g.sections.map((s, idx) => {
+                      const its = groups.bySec[s.id] || [];
+                      if (q && its.length === 0) return null;
+                      return (
+                        <React.Fragment key={s.id}>
+                          <SectionHeader
+                            section={s}
+                            index={idx}
+                            total={g.sections.length}
+                            count={its.length}
+                            accent={accent}
+                            g={g}
+                            disabled={Boolean(q)}
+                            onDragStart={onSectionDragStart}
+                            dragging={draggingSection === s.id}
+                          />
+                          {its.map((it) => (
+                            <ItemRow
+                              key={it.id}
+                              it={it}
+                              rowH={rowH}
+                              accent={accent}
+                              g={g}
+                              showAvatars={tweaks.showAvatars}
+                            />
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                     </div>
                   </div>
                 )}
