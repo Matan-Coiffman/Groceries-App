@@ -803,21 +803,40 @@
           (text, qty = 1, by = me || "ima") => {
             const clean = text.trim();
             if (!clean) return;
-            mutate((prev) => ({
-              items: [
-                {
-                  id: uid(),
-                  text: clean,
-                  qty,
-                  by,
+            const key = clean.toLowerCase();
+            mutate((prev) => {
+              const idx = prev.items.findIndex(
+                (x) => x.text.trim().toLowerCase() === key,
+              );
+              if (idx !== -1) {
+                const ex = prev.items[idx];
+                const merged = {
+                  ...ex,
+                  qty: ex.qty + qty,
                   done: false,
-                  pinned: false,
                   ts: Date.now(),
-                },
-                ...prev.items,
-              ],
-              history: prev.history,
-            }));
+                };
+                return {
+                  items: [merged, ...prev.items.filter((_, i) => i !== idx)],
+                  history: prev.history,
+                };
+              }
+              return {
+                items: [
+                  {
+                    id: uid(),
+                    text: clean,
+                    qty,
+                    by,
+                    done: false,
+                    pinned: false,
+                    ts: Date.now(),
+                  },
+                  ...prev.items,
+                ],
+                history: prev.history,
+              };
+            });
           },
           [me, mutate],
         );
