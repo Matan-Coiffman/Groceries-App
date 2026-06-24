@@ -997,24 +997,10 @@
         );
 
         const reset = React.useCallback(
-          (label = "רשימה") => {
+          () => {
             const current = stateRef.current.items;
             if (!current.length) return;
             mutate((prev) => ({
-              history: [
-                {
-                  id: "h" + Date.now(),
-                  label,
-                  date: "היום",
-                  ts: Date.now(),
-                  items: prev.items.map((x) => ({
-                    text: x.text,
-                    qty: x.qty,
-                    by: x.by,
-                  })),
-                },
-                ...prev.history,
-              ],
               items: prev.items
                 .filter((x) => x.pinned)
                 .map((x) => ({ ...x, done: false })),
@@ -1277,37 +1263,11 @@
         showAvatars,
       }) {
         const isDragging = dragging === it.id;
-        const [confirming, setConfirming] = React.useState(false);
         const [deleting, setDeleting] = React.useState(false);
-        const confirmTimerRef = React.useRef(null);
-        const docDownRef = React.useRef(null);
-        const controlRef = React.useRef(null);
         const [secMenu, setSecMenu] = React.useState(false);
         const [menuPos, setMenuPos] = React.useState(null);
         const secMenuRef = React.useRef(null);
         const menuRef = React.useRef(null);
-
-        const disarm = React.useCallback(() => {
-          if (confirmTimerRef.current) {
-            clearTimeout(confirmTimerRef.current);
-            confirmTimerRef.current = null;
-          }
-          if (docDownRef.current) {
-            document.removeEventListener(
-              "pointerdown",
-              docDownRef.current,
-              true,
-            );
-            docDownRef.current = null;
-          }
-        }, []);
-
-        const revert = React.useCallback(() => {
-          disarm();
-          setConfirming(false);
-        }, [disarm]);
-
-        React.useEffect(() => () => disarm(), [disarm]);
 
         React.useEffect(() => {
           if (!secMenu) return;
@@ -1322,28 +1282,28 @@
             document.removeEventListener("pointerdown", handler, true);
         }, [secMenu]);
 
-        const onDeleteTap = () => {
-          if (deleting) return;
-          if (!confirming) {
-            setConfirming(true);
-            confirmTimerRef.current = setTimeout(revert, 3000);
-            const handler = (ev) => {
-              if (
-                controlRef.current &&
-                !controlRef.current.contains(ev.target)
-              ) {
-                revert();
-              }
-            };
-            docDownRef.current = handler;
-            document.addEventListener("pointerdown", handler, true);
-            return;
-          }
-          disarm();
-          setConfirming(false);
+        const doDelete = () => {
+          setSecMenu(false);
           setDeleting(true);
           setTimeout(() => g.remove(it.id), 450);
         };
+
+        const menuItemStyle = (cur) => ({
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          textAlign: "start",
+          border: "none",
+          background: cur ? "#efe8d8" : "transparent",
+          color: "#2a241a",
+          borderRadius: 7,
+          padding: "9px 10px",
+          fontSize: 13.5,
+          fontWeight: cur ? 700 : 500,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        });
 
         return (
           <div
@@ -1479,29 +1439,6 @@
 
             {showAvatars !== false && <Avatar id={it.by} size={22} />}
 
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => g.togglePin(it.id)}
-              aria-label={it.pinned ? "בטל קיבוע" : "קבע פריט"}
-              title={it.pinned ? "בטל קיבוע" : "קבע פריט"}
-              style={{
-                width: 28,
-                height: 28,
-                border: "none",
-                background: it.pinned ? "#f7d77466" : "transparent",
-                color: accent,
-                borderRadius: 8,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                opacity: it.pinned ? 1 : 0.38,
-              }}
-            >
-              <PinIcon active={it.pinned} color={accent} />
-            </button>
-
             <span ref={secMenuRef} style={{ flexShrink: 0 }}>
               <button
                 type="button"
@@ -1512,13 +1449,13 @@
                     return;
                   }
                   const r = e.currentTarget.getBoundingClientRect();
-                  const menuW = 150;
+                  const menuW = 188;
                   let left = r.right - menuW;
                   if (left < 8) left = 8;
                   if (left + menuW > window.innerWidth - 8)
                     left = window.innerWidth - 8 - menuW;
                   const openUp =
-                    window.innerHeight - r.bottom < 280 && r.top > 280;
+                    window.innerHeight - r.bottom < 340 && r.top > 340;
                   setMenuPos({
                     left: Math.round(left),
                     top: openUp ? null : Math.round(r.bottom + 4),
@@ -1528,36 +1465,27 @@
                   });
                   setSecMenu(true);
                 }}
-                aria-label="העבר למדור"
-                title="העבר למדור"
+                aria-label="אפשרויות"
+                title="אפשרויות"
+                className="row-del"
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 30,
+                  height: 30,
                   border: "none",
                   background: secMenu ? "#efe8d8" : "transparent",
-                  color: accent,
+                  color: "#2a241a",
                   borderRadius: 8,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
-                  opacity: secMenu ? 1 : 0.5,
+                  opacity: secMenu ? 1 : 0.55,
                 }}
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M2.5 3.5 H8 L13.5 8 L8 12.5 H2.5 Z"
-                    fill="none"
-                    stroke="#2a241a"
-                    strokeWidth="1.4"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="5.2" cy="8" r="1.05" fill="#2a241a" />
+                <svg width="4" height="16" viewBox="0 0 4 16" aria-hidden="true">
+                  <circle cx="2" cy="2.5" r="1.6" fill="#2a241a" />
+                  <circle cx="2" cy="8" r="1.6" fill="#2a241a" />
+                  <circle cx="2" cy="13.5" r="1.6" fill="#2a241a" />
                 </svg>
               </button>
               {secMenu &&
@@ -1565,6 +1493,7 @@
                 ReactDOM.createPortal(
                   <div
                     ref={menuRef}
+                    dir="rtl"
                     style={{
                       position: "fixed",
                       left: menuPos.left,
@@ -1576,13 +1505,60 @@
                       borderRadius: 10,
                       boxShadow: "0 12px 28px -8px rgba(0,0,0,.45)",
                       zIndex: 9999,
-                      minWidth: 150,
-                      maxHeight: 280,
+                      minWidth: 188,
+                      maxHeight: 340,
                       overflowY: "auto",
                       padding: 4,
                     }}
                   >
-                    {[{ id: null, name: "ללא מדור" }, ...g.sections].map((s) => {
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        g.togglePin(it.id);
+                        setSecMenu(false);
+                      }}
+                      style={menuItemStyle(false)}
+                    >
+                      <PinIcon active={it.pinned} color={accent} />
+                      <span style={{ flex: 1 }}>
+                        {it.pinned ? "בטל קיבוע" : "קבע פריט"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={doDelete}
+                      style={{ ...menuItemStyle(false), color: "#a52a1f" }}
+                    >
+                      <span
+                        style={{
+                          width: 16,
+                          textAlign: "center",
+                          fontSize: 14,
+                          flexShrink: 0,
+                        }}
+                      >
+                        ✕
+                      </span>
+                      <span style={{ flex: 1 }}>מחק פריט</span>
+                    </button>
+                    <div
+                      style={{
+                        borderTop: "1px solid rgba(0,0,0,.08)",
+                        margin: "4px 6px",
+                      }}
+                    />
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.5,
+                        padding: "4px 10px 2px",
+                      }}
+                    >
+                      העבר למחלקה
+                    </div>
+                    {[{ id: null, name: "ללא מחלקה" }, ...g.sections].map((s) => {
                       const cur = (it.section || null) === s.id;
                       return (
                         <button
@@ -1593,30 +1569,14 @@
                             g.setItemSection(it.id, s.id);
                             setSecMenu(false);
                           }}
-                          dir="rtl"
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            width: "100%",
-                            textAlign: "start",
-                            border: "none",
-                            background: cur ? "#efe8d8" : "transparent",
-                            color: "#2a241a",
-                            borderRadius: 7,
-                            padding: "8px 10px",
-                            fontSize: 13,
-                            fontWeight: cur ? 700 : 500,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
+                          style={menuItemStyle(cur)}
                         >
                           <span
-                            style={{ width: 12, color: accent, flexShrink: 0 }}
+                            style={{ width: 14, color: accent, flexShrink: 0 }}
                           >
                             {cur ? "✓" : ""}
                           </span>
-                          {s.name}
+                          <span style={{ flex: 1 }}>{s.name}</span>
                         </button>
                       );
                     })}
@@ -1624,70 +1584,6 @@
                   document.body,
                 )}
             </span>
-
-            <button
-              ref={controlRef}
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={onDeleteTap}
-              aria-label={confirming ? "אישור מחיקה" : "מחק פריט"}
-              title={confirming ? "מחק?" : "מחק"}
-              className={confirming ? undefined : "row-del"}
-              style={
-                confirming
-                  ? {
-                      border: "none",
-                      background: accent,
-                      color: "#fff",
-                      borderRadius: 999,
-                      padding: "3px 9px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      whiteSpace: "nowrap",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                      boxShadow: "0 2px 6px -2px rgba(0,0,0,.32)",
-                      animation: "wobble .5s ease-in-out",
-                    }
-                  : {
-                      border: "none",
-                      background: "transparent",
-                      cursor: "pointer",
-                      padding: 4,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }
-              }
-            >
-              {confirming ? (
-                "מחק?"
-              ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M4 4 Q8 7 12 12"
-                    fill="none"
-                    stroke="#2a241a"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M12 4 Q8 9 4 12"
-                    fill="none"
-                    stroke="#2a241a"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              )}
-            </button>
           </div>
         );
       }
@@ -1758,7 +1654,7 @@
                   flex: 1,
                 }}
               >
-                ללא מדור
+                ללא מחלקה
               </span>
               <span style={countStyle}>{count}</span>
             </div>
@@ -1780,8 +1676,8 @@
             {!disabled && !editing && onDragStart && (
               <button
                 type="button"
-                aria-label="גרור לסידור מדורים"
-                title="גרירה לסידור מדורים"
+                aria-label="גרור לסידור מחלקות"
+                title="גרירה לסידור מחלקות"
                 onPointerDown={(e) => onDragStart(index, e)}
                 style={{
                   background: "transparent",
@@ -1893,8 +1789,8 @@
                         3000,
                       );
                     }}
-                    aria-label="מחק מדור"
-                    title="מחק מדור"
+                    aria-label="מחק מחלקה"
+                    title="מחק מחלקה"
                     style={iconBtn(true)}
                   >
                     ✕
@@ -1908,10 +1804,8 @@
 
       function NotebookApp({ tweaks = A_DEFAULTS }) {
         const g = useGroceries();
-        const [tab, setTab] = React.useState("list");
         const [draft, setDraft] = React.useState("");
         const [draftQty, setDraftQty] = React.useState(1);
-        const [openHist, setOpenHist] = React.useState(null);
         const [draggingSection, setDraggingSection] = React.useState(null);
         const [activeSection, setActiveSection] = React.useState(null);
         const [creatingSection, setCreatingSection] = React.useState(false);
@@ -1929,11 +1823,6 @@
         const visibleItems = q
           ? orderedItems.filter((x) => x.text.toLowerCase().includes(q))
           : orderedItems;
-        const suggestions = React.useMemo(
-          () => deriveSuggestions(g.history, g.items),
-          [g.history, g.items],
-        );
-
         const groups = React.useMemo(() => {
           const ids = new Set(g.sections.map((s) => s.id));
           const bySec = {};
@@ -2015,13 +1904,10 @@
           if (id) setActiveSection(id);
         };
 
-        const paperBackground =
-          tab === "list"
-            ? `
+        const paperBackground = `
             linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px),
             repeating-linear-gradient(0deg, transparent 0, transparent 1px, rgba(120,160,200,.36) 1px, rgba(120,160,200,.36) 2px, transparent 2px, transparent ${rowH}px)
-          `
-            : "linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px)";
+          `;
 
         if (g.loading) {
           return (
@@ -2170,52 +2056,13 @@
             </div>
 
             <div
-              style={{
-                display: "flex",
-                gap: 4,
-                padding: "4px 18px 0",
-                position: "relative",
-                zIndex: 2,
-              }}
-            >
-              {[
-                { id: "list", label: "רשימה" },
-                { id: "history", label: "היסטוריה" },
-                { id: "suggest", label: "הצעות" },
-              ].map((t) => (
-                <button
-                  type="button"
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  style={{
-                    background: tab === t.id ? "#faf3e0" : "#e2d8bf",
-                    border: "none",
-                    borderTop: `2px solid ${tab === t.id ? accent : "#c4b896"}`,
-                    borderInline: "1px solid #c4b896",
-                    padding: "8px 16px 10px",
-                    borderRadius: "10px 10px 0 0",
-                    fontSize: 13,
-                    fontWeight: tab === t.id ? 700 : 500,
-                    color: tab === t.id ? "#2a241a" : "rgba(42,36,26,.55)",
-                    cursor: "pointer",
-                    marginBottom: tab === t.id ? -1 : 0,
-                    position: "relative",
-                    zIndex: tab === t.id ? 3 : 1,
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div
               className="paper-sheet"
               style={{
                 flex: 1,
                 minHeight: 0,
                 background: "#faf3e0",
-                margin: "0 14px 0",
-                borderRadius: "6px 6px 18px 18px",
+                margin: "2px 14px calc(10px + env(safe-area-inset-bottom))",
+                borderRadius: "16px 16px 18px 18px",
                 boxShadow:
                   "0 1px 0 #fff inset, 0 8px 16px -10px rgba(0,0,0,.2)",
                 position: "relative",
@@ -2243,14 +2090,10 @@
                   overflowY: "auto",
                   WebkitOverflowScrolling: "touch",
                   backgroundImage: paperBackground,
-                  backgroundPosition:
-                    tab === "list"
-                      ? `0 0, 0 ${8 + Math.round(rowH * 0.72)}px`
-                      : "0 0",
+                  backgroundPosition: `0 0, 0 ${8 + Math.round(rowH * 0.72)}px`,
                 }}
               >
-                {tab === "list" && (
-                  <div key="list">
+                <div key="list">
                     <div
                       style={{
                         position: "sticky",
@@ -2288,7 +2131,7 @@
                             whiteSpace: "nowrap",
                           }}
                         >
-                          ללא מדור
+                          ללא מחלקה
                         </button>
                         {g.sections.map((s) => (
                           <button
@@ -2327,7 +2170,7 @@
                                 setNewSectionName("");
                               }
                             }}
-                            placeholder="שם מדור…"
+                            placeholder="שם מחלקה…"
                             dir="rtl"
                             style={{
                               flexShrink: 0,
@@ -2357,7 +2200,7 @@
                               whiteSpace: "nowrap",
                             }}
                           >
-                            + מדור
+                            + מחלקה
                           </button>
                         )}
                       </div>
@@ -2571,220 +2414,30 @@
                     })}
                     </div>
                   </div>
-                )}
-
-                {tab === "history" && (
-                  <div
-                    key="hist"
-                    style={{
-                      animation: "pageFlip .25s ease-out",
-                      padding: "40px 44px 100px 16px",
-                    }}
-                  >
-                    {g.history.map((h) => (
-                      <div key={h.id} style={{ marginBottom: 14 }}>
-                        <div
-                          onClick={() =>
-                            setOpenHist(openHist === h.id ? null : h.id)
-                          }
-                          style={{
-                            display: "flex",
-                            alignItems: "baseline",
-                            justifyContent: "space-between",
-                            cursor: "pointer",
-                            paddingBottom: 4,
-                            borderBottom: `1px dashed ${accent}88`,
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                fontFamily: '"Suez One", "Heebo"',
-                                fontSize: 18,
-                                fontWeight: 400,
-                              }}
-                            >
-                              {h.label}
-                            </div>
-                            <div style={{ fontSize: 11, opacity: 0.5 }}>
-                              {h.date} · {h.items.length} פריטים
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: accent,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {openHist === h.id ? "סגור" : "פתח"}
-                          </div>
-                        </div>
-                        {openHist === h.id && (
-                          <div style={{ paddingTop: 8, paddingInlineStart: 8 }}>
-                            {h.items.map((x, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  display: "flex",
-                                  gap: 8,
-                                  alignItems: "center",
-                                  fontSize: 14,
-                                  padding: "3px 0",
-                                }}
-                              >
-                                <Avatar id={x.by} size={16} />
-                                <span style={{ flex: 1 }}>{x.text}</span>
-                                {x.qty > 1 && (
-                                  <span
-                                    style={{
-                                      fontFamily: "monospace",
-                                      fontSize: 12,
-                                      opacity: 0.6,
-                                    }}
-                                  >
-                                    ×{x.qty}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                g.restoreFromHistory(h.id);
-                                setTab("list");
-                              }}
-                              style={{
-                                marginTop: 8,
-                                background: "transparent",
-                                border: `1.5px dashed ${accent}`,
-                                color: accent,
-                                fontSize: 12,
-                                fontWeight: 700,
-                                padding: "6px 12px",
-                                borderRadius: 10,
-                                cursor: "pointer",
-                              }}
-                            >
-                              ↶ שחזר לרשימה הנוכחית
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {tab === "suggest" && (
-                  <div
-                    key="sug"
-                    style={{
-                      padding: "40px 44px 100px 16px",
-                      animation: "pageFlip .25s ease-out",
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: 12, opacity: 0.55, marginBottom: 12 }}
-                    >
-                      לפי ההיסטוריה שלכם:
-                    </div>
-                    {suggestions.length === 0 && (
-                      <div
-                        style={{
-                          fontSize: 14,
-                          opacity: 0.45,
-                          fontStyle: "italic",
-                          paddingTop: 20,
-                        }}
-                      >
-                        עדיין אין מספיק היסטוריה להצעות
-                      </div>
-                    )}
-                    {suggestions.map((s, i) => (
-                      <div
-                        key={`${s.text}-${i}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 0",
-                          borderBottom: "1px dashed rgba(0,0,0,.1)",
-                        }}
-                      >
-                        <Avatar id={s.by} size={20} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: 16,
-                              fontWeight: 500,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {s.text}
-                          </div>
-                          <div
-                            style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}
-                          >
-                            {s.reason}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            g.addSuggestion(s.text);
-                            setTab("list");
-                          }}
-                          style={{
-                            background: accent,
-                            color: "#fff",
-                            border: "none",
-                            width: 30,
-                            height: 30,
-                            borderRadius: "50%",
-                            fontSize: 18,
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            boxShadow: "0 2px 6px -2px rgba(0,0,0,.3)",
-                          }}
-                        >
-                          +
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            </div>
-
-            <div
-              style={{
-                padding: "8px 18px calc(14px + env(safe-area-inset-bottom))",
-                background:
-                  "linear-gradient(180deg, rgba(239,232,216,0), #efe8d8 30%)",
-                position: "relative",
-                zIndex: 4,
-              }}
-            >
               <div
                 style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 5,
                   display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  padding: "0 4px",
-                  gap: 12,
+                  justifyContent: "center",
+                  padding: "12px 16px 14px",
+                  background:
+                    "linear-gradient(180deg, rgba(250,243,224,0), #faf3e0 38%)",
+                  pointerEvents: "none",
                 }}
               >
-                <HoldButton
-                  color={accent}
-                  onComplete={() => {
-                    g.reset("רשימת קניות");
-                    setTab("history");
-                  }}
-                >
-                  ✂ לחצו להתחלת רשימה חדשה
-                </HoldButton>
+                <div style={{ pointerEvents: "auto" }}>
+                  <HoldButton
+                    color={accent}
+                    onComplete={() => g.reset("רשימת קניות")}
+                  >
+                    ✂ לחצו להתחלת רשימה חדשה
+                  </HoldButton>
+                </div>
               </div>
             </div>
 
