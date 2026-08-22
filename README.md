@@ -1,6 +1,16 @@
 # Groceries-App
 
-Hebrew RTL family grocery list app, using the notebook variation from the prototype. The static app lives in `index.html`; shared state is stored as one JSON blob in Vercel KV through `api/state.js`.
+Hebrew RTL family grocery list app, using the notebook variation from the prototype. The UI source is `src/app.jsx`, compiled to `app.js` (React loads pinned from unpkg with SRI); shared state is stored as one JSON blob in Vercel KV through `api/state.js`. A service worker (`sw.js`) caches the shell and fonts for offline use.
+
+## Editing the UI
+
+After changing `src/app.jsx`, rebuild the bundle:
+
+```
+npm run build:ui
+```
+
+Commit both `src/app.jsx` and `app.js`; deploys need no build step.
 
 ## Deploy to Vercel
 
