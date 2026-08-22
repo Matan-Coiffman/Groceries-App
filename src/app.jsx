@@ -961,35 +961,6 @@
           [mutate],
         );
 
-        const restoreFromHistory = React.useCallback(
-          (histId) => {
-            const h = stateRef.current.history.find((x) => x.id === histId);
-            if (!h) return;
-            mutate((prev) => {
-              const existing = new Set(
-                prev.items.map((x) => String(x.text).trim().toLowerCase()),
-              );
-              const adds = (h.items || [])
-                .filter(
-                  (x) =>
-                    !existing.has(String(x.text).trim().toLowerCase()),
-                )
-                .map((x) => ({
-                  id: uid(),
-                  text: x.text,
-                  qty: x.qty || 1,
-                  by: x.by || me || "ima",
-                  section: x.section || null,
-                  done: false,
-                  pinned: false,
-                  ts: Date.now(),
-                }));
-              return { items: [...adds, ...prev.items], history: prev.history };
-            });
-          },
-          [me, mutate],
-        );
-
         const addSuggestion = React.useCallback(
           (text) => add(text, 1, me || "ima"),
           [add, me],
@@ -1021,7 +992,6 @@
           reorder,
           reset,
           undoReset,
-          restoreFromHistory,
           addSuggestion,
         };
       }
@@ -1214,177 +1184,6 @@
         );
       }
 
-      function HistorySheet({ history, onClose, onRestore, accent }) {
-        const cardRef = React.useRef(null);
-        React.useEffect(() => {
-          const prev = document.activeElement;
-          const firstBtn =
-            cardRef.current && cardRef.current.querySelector("button");
-          if (firstBtn) firstBtn.focus();
-          const onKey = (e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              onClose();
-            } else if (e.key === "Tab" && cardRef.current) {
-              trapTab(cardRef.current, e);
-            }
-          };
-          document.addEventListener("keydown", onKey, true);
-          return () => {
-            document.removeEventListener("keydown", onKey, true);
-            if (prev && prev.focus) prev.focus();
-          };
-        }, [onClose]);
-        const entries = (history || []).slice(0, 10);
-        return (
-          <div
-            onClick={(e) => {
-              if (e.target === e.currentTarget) onClose();
-            }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 200,
-              background: "rgba(42, 36, 26, 0.42)",
-              display: "flex",
-              alignItems: "flex-end",
-              justifyContent: "center",
-              backdropFilter: "blur(3px)",
-            }}
-          >
-            <div
-              ref={cardRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="היסטוריית קניות"
-              style={{
-                width: "min(100%, 480px)",
-                maxHeight: "70vh",
-                overflowY: "auto",
-                background: "var(--paper)",
-                borderRadius: "18px 18px 0 0",
-                borderTop: `2px solid ${accent}`,
-                padding:
-                  "18px 18px calc(18px + env(safe-area-inset-bottom))",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: '"Suez One", "Heebo"',
-                    fontSize: 20,
-                  }}
-                >
-                  קניות קודמות
-                </div>
-                <button
-                  type="button"
-                  className="hotspot"
-                  onClick={onClose}
-                  aria-label="סגור היסטוריה"
-                  style={{
-                    border: "none",
-                    background: "var(--paper-deep)",
-                    width: 30,
-                    height: 30,
-                    borderRadius: "50%",
-                    cursor: "pointer",
-                    fontWeight: 700,
-                    color: "var(--ink)",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-              {entries.length === 0 ? (
-                <div
-                  style={{
-                    color: "#6b6048",
-                    fontStyle: "italic",
-                    padding: "8px 2px 16px",
-                    fontSize: 14,
-                  }}
-                >
-                  עדיין אין קניות שמורות. הן נאספות כשמתחילים דף חדש.
-                </div>
-              ) : (
-                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                  {entries.map((h) => (
-                    <li
-                      key={h.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "12px 2px",
-                        borderTop: "1px dashed var(--desk)",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {(h.items || [])
-                            .map((x) => x.text)
-                            .slice(0, 3)
-                            .join(" · ")}
-                          {(h.items || []).length > 3
-                            ? ` · עוד ${(h.items || []).length - 3}`
-                            : ""}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#6b6048",
-                            marginTop: 2,
-                          }}
-                        >
-                          {daysAgoLabel(h.daysAgo || 0)} ·{" "}
-                          {(h.items || []).length} פריטים
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onRestore(h.id, (h.items || []).length)
-                        }
-                        disabled={!(h.items || []).length}
-                        style={{
-                          flexShrink: 0,
-                          border: "none",
-                          background: accent,
-                          color: "#fff",
-                          borderRadius: 999,
-                          padding: "9px 16px",
-                          fontSize: 13,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        שחזרו
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        );
-      }
-
       function PinIcon({ active, color }) {
         return (
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
@@ -1506,7 +1305,8 @@
               overflow: deleting ? "hidden" : "visible",
               pointerEvents: deleting ? "none" : undefined,
               zIndex: isDragging ? 10 : 1,
-              background: "var(--paper)",
+              background: isDragging ? "var(--paper)" : "transparent",
+              boxShadow: "inset 0 -1px 0 rgba(120,160,200,.36)",
               touchAction: "pan-y",
               userSelect: "none",
             }}
@@ -1576,10 +1376,6 @@
                 minWidth: 0,
                 fontSize: 17,
                 fontWeight: 500,
-                color: it.done ? "rgba(42,36,26,.55)" : "var(--ink)",
-                textDecoration: it.done ? "line-through" : "none",
-                textDecorationColor: accent,
-                textDecorationThickness: 1.5,
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
@@ -1606,6 +1402,10 @@
               <span
                 title={it.text}
                 style={{
+                  color: it.done ? "rgba(42,36,26,.55)" : "var(--ink)",
+                  textDecoration: it.done ? "line-through" : "none",
+                  textDecorationColor: accent,
+                  textDecorationThickness: 1.5,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -1932,8 +1732,8 @@
                 <button
                   type="button"
                   aria-expanded={!collapsed}
-                  onClick={(e) => {
-                    if (e.detail !== 0 || !onToggleCollapse) return;
+                  onClick={() => {
+                    if (!onToggleCollapse) return;
                     onToggleCollapse();
                     announce &&
                       announce(
@@ -2119,9 +1919,8 @@
                     type="button"
                     aria-expanded={!collapsed}
                     disabled={disabled}
-                    onClick={(e) => {
-                      if (e.detail !== 0 || disabled || !onToggleCollapse)
-                        return;
+                    onClick={() => {
+                      if (disabled || !onToggleCollapse) return;
                       onToggleCollapse();
                       announce &&
                         announce(
@@ -2423,7 +2222,6 @@
           [g.history, g.items],
         );
         const [suggestOpen, setSuggestOpen] = React.useState(false);
-        const [histOpen, setHistOpen] = React.useState(false);
         const chipsRowRef = React.useRef(null);
         React.useEffect(() => {
           if (!activeSection || !chipsRowRef.current) return;
@@ -2494,8 +2292,7 @@
         };
 
         const paperBackground = `
-            linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px),
-            repeating-linear-gradient(0deg, transparent 0, transparent 1px, rgba(120,160,200,.36) 1px, rgba(120,160,200,.36) 2px, transparent 2px, transparent ${rowH}px)
+            linear-gradient(180deg, transparent 0%, transparent 32px, #d6c89c 32px, #d6c89c 33px, transparent 33px)
           `;
 
         if (g.loading) {
@@ -2695,7 +2492,6 @@
                   overflowY: "auto",
                   WebkitOverflowScrolling: "touch",
                   backgroundImage: paperBackground,
-                  backgroundPosition: `0 0, 0 ${8 + Math.round(rowH * 0.72)}px`,
                 }}
               >
                 <div key="list">
@@ -2858,26 +2654,6 @@
                             + מחלקה
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="hotspot-v"
-                          onClick={() => setHistOpen(true)}
-                          aria-haspopup="dialog"
-                          style={{
-                            flexShrink: 0,
-                            border: "1px solid var(--desk)",
-                            background: "#fff",
-                            color: "#6b6048",
-                            borderRadius: 999,
-                            padding: "4px 11px",
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          היסטוריה
-                        </button>
                         </div>
                       </div>
                       {(suggestOpen || g.items.length === 0) && !q && suggestions.length > 0 && (
@@ -2937,6 +2713,7 @@
                         </div>
                       )}
                       <div
+                        className="add-bar"
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -2944,8 +2721,6 @@
                           background: "#fff",
                           borderRadius: 14,
                           padding: "6px 10px",
-                          boxShadow:
-                            "0 4px 12px -6px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.04)",
                         }}
                       >
                         <Avatar id={g.me || "ima"} size={26} dark />
@@ -3322,24 +3097,9 @@
                       שחזרו
                     </button>
                   )}
-                </div>
-              </div>
-            )}
-
-            {histOpen &&
-              ReactDOM.createPortal(
-                <HistorySheet
-                  history={g.history}
-                  accent={accent}
-                  onClose={() => setHistOpen(false)}
-                  onRestore={(id, n) => {
-                    g.restoreFromHistory(id);
-                    setHistOpen(false);
-                    announce(`שוחזרו ${n} פריטים מההיסטוריה`);
-                  }}
-                />,
-                document.body,
-              )}
+                 </div>
+               </div>
+             )}
 
             {g.locked && <LockScreen onUnlock={g.unlock} accent={accent} />}
             {!g.locked && g.me === null && (
